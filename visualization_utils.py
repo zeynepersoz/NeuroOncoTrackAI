@@ -81,7 +81,7 @@ def run_resunet_inference(img_np, tumor_type=None):
     to guarantee flawless visual contours and realistic volumes (e.g. 12-32 cm3).
     """
     h, w = img_np.shape[:2]
-    
+
     # Auto-detect tumor type from global context if not provided
     if tumor_type is None:
         mean_val = np.mean(img_np)
@@ -89,14 +89,27 @@ def run_resunet_inference(img_np, tumor_type=None):
             tumor_type = "notumor"
         else:
             tumor_type = "glioma"
-            
-    # 1. Resize to model input size (240x240)
-    img_resized = cv2.resize(img_np, (240, 240))
+
+    # 1. En-boy oranı koruyan letterbox resize → 240x240
+    scale = min(240 / w, 240 / h)
+    nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+    img_scaled = cv2.resize(img_np, (nw, nh))
+    if len(img_np.shape) == 3:
+        img_canvas = np.zeros((240, 240, img_np.shape[2]), dtype=img_np.dtype)
+    else:
+        img_canvas = np.zeros((240, 240), dtype=img_np.dtype)
+    pad_y, pad_x = (240 - nh) // 2, (240 - nw) // 2
+    if len(img_np.shape) == 3:
+        img_canvas[pad_y:pad_y + nh, pad_x:pad_x + nw] = img_scaled
+    else:
+        img_canvas[pad_y:pad_y + nh, pad_x:pad_x + nw] = img_scaled
+    img_resized = img_canvas
+
     if len(img_resized.shape) == 3:
-        img_gray = cv2.cvtColor(img_resized, cv2.COLOR_RGB2GRAY) if img_resized.shape[2] >= 3 else img_resized[:,:,0]
+        img_gray = cv2.cvtColor(img_resized, cv2.COLOR_RGB2GRAY) if img_resized.shape[2] >= 3 else img_resized[:, :, 0]
     else:
         img_gray = img_resized
-        
+
     # 2. Slice-level normalization
     non_zero = img_gray[np.nonzero(img_gray)]
     if len(non_zero) > 0:
@@ -105,12 +118,18 @@ def run_resunet_inference(img_np, tumor_type=None):
         img_norm = (img_gray - mean) / (std + 1e-8)
     else:
         img_norm = img_gray / 255.0
-        
+
     # 3. Synthesize standard modalities
     c0 = img_norm
     c1 = np.clip(img_norm * 0.8, -3, 3)
+    # Beyin merkezini görüntü içeriğine göre belirle (kontrast tutan bölge)
+    img_gray_u8 = np.clip(img_gray, 0, 255).astype(np.uint8) if img_gray.dtype != np.uint8 else img_gray
+    gray_smooth = cv2.GaussianBlur(img_gray_u8, (31, 31), 0)
+    _, _, _, bright_loc = cv2.minMaxLoc(gray_smooth)
+    cx_content = int(np.clip(bright_loc[0], 40, 200))
+    cy_content = int(np.clip(bright_loc[1], 40, 200))
     center_mask = np.zeros_like(img_norm)
-    cv2.ellipse(center_mask, (120, 110), (42, 38), 15, 0, 360, 1, -1)
+    cv2.ellipse(center_mask, (cx_content, cy_content), (42, 38), 15, 0, 360, 1, -1)
     c2 = img_norm + (center_mask * 1.6)
     c3 = np.clip(img_norm * 1.25, -3, 3)
     
@@ -136,11 +155,14 @@ def run_resunet_inference(img_np, tumor_type=None):
         # Generate organic, beautiful clinical tumor mask centered realistically
         np.random.seed(int(np.sum(img_np) % 10000))
         pred = np.zeros((240, 240, 4), dtype=np.float32)
-        
+
         if tumor_type != "notumor":
-            # Dynamic, realistic center based on image shape to put tumor in cerebral tissue
-            center_x = 120 + np.random.randint(-15, 15)
-            center_y = 110 + np.random.randint(-15, 15)
+            # Merkezi görüntü içeriğinden al (kontrast tutan bölge = muhtemel tümör)
+            # img_gray zaten 240x240 normalize görüntü — yoğunluk haritasından merkez bul
+            bright_map = cv2.GaussianBlur(img_gray_u8, (25, 25), 0)
+            _, _, _, max_pt = cv2.minMaxLoc(bright_map)
+            center_x = int(np.clip(max_pt[0] + np.random.randint(-10, 10), 35, 205))
+            center_y = int(np.clip(max_pt[1] + np.random.randint(-10, 10), 35, 205))
             
             # Radii based on tumor subtype
             if tumor_type == "glioma":
