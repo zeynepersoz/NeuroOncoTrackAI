@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NeuroOncoTrack-AI Service — Birleşik gereksinimler
+# Mert (preprocessing + XAI + RAG) + Zeynep (v3 sınıflandırma)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# --- HTTP servisi -----------------------------------------------------------
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+pydantic>=2.5.0
+
+# --- Sayısal çekirdek -------------------------------------------------------
+# NOT: numpy 2.x TensorFlow 2.15/2.16 ile çakışabilir → 1.26 aralığı önerilir.
+numpy>=1.26.0,<2.0
+Pillow>=10.0.0
+matplotlib>=3.7.0
+
+# --- Görüntü işleme ---------------------------------------------------------
+opencv-python-headless>=4.9.0
+scikit-image>=0.22.0
+SimpleITK>=2.3.0
+nibabel>=5.2.0
+pydicom>=2.4.0
+
+# --- ML / sınıflandırma (Zeynep) --------------------------------------------
+scikit-learn>=1.3.0
+joblib>=1.3.0
+pandas>=2.0.0
+tensorflow>=2.15.0        # MobileNetV2 backbone (feature extractor)
+
+# --- Derin öğrenme (Mert: XAI + augmentasyon) -------------------------------
+torch>=2.0.0
+monai>=1.3.0
+
+# --- Skull strip (Mert) — opsiyonel; HD-BET ağırlıkları ilk çağrıda indirir -
+# HD-BET @ git+https://github.com/MIC-DKFZ/HD-BET.git
+
+# --- RAG stack (Mert) -------------------------------------------------------
+groq>=0.4.0
+faiss-cpu>=1.7.0
+sentence-transformers>=2.2.0
+
+# --- Test -------------------------------------------------------------------
+pytest>=7.4.0
+
+# ─── SİSTEM PAKETLERİ (pip harici) ──────────────────────────────────────────
+# macOS:  brew install dcm2niix libomp
+# Linux:  apt install dcm2niix libgomp1
+# ─────────────────────────────────────────────────────────────────────────────

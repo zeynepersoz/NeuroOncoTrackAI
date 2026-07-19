@@ -1,0 +1,60 @@
+{
+  "n_test": 400,
+  "v1_metrics": {
+    "acc": 0.97,
+    "bacc": 0.97,
+    "f1": 0.651431279941767,
+    "cm": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        6,
+        188,
+        6
+      ],
+      [
+        0,
+        0,
+        200
+      ]
+    ],
+    "mean_conf": 0.846837212315146
+  },
+  "v3_metrics": {
+    "acc": 0.9,
+    "bacc": 0.9,
+    "f1": 0.6247035212552454,
+    "cm": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        34,
+        160,
+        6
+      ],
+      [
+        0,
+        0,
+        200
+      ]
+    ],
+    "mean_conf": 0.7901640267925848
+  },
+  "delta_v3_minus_v1": {
+    "acc": -0.06999999999999995,
+    "bacc": -0.06999999999999995,
+    "f1": -0.026727758686521552
+  },
+  "notes": {
+    "glioma_v1_external_recall": 0.6774,
+    "glioma_v3_groupcv_recall": 0.9761,
+    "meningioma_v3_groupcv_recall": 0.7967,
+    "explanation": "v3, 530 glioma ile geni\u015fletilmi\u015f cache'de e\u011fitildi. Glioma taraf\u0131 art\u0131k eksternal test yap\u0131lamaz."
+  }
+}

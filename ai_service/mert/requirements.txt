@@ -1,0 +1,16 @@
+SimpleITK>=2.3.0
+nibabel>=5.1.0
+numpy==2.4.4
+HD-BET @ git+https://github.com/MIC-DKFZ/HD-BET.git
+
+monai>=1.3.0
+torch>=2.0.0
+
+matplotlib>=3.7.0
+Pillow>=10.0.0
+
+groq>=0.4.0
+faiss-cpu>=1.7.0
+sentence-transformers>=2.2.0
+
+pytest>=7.4.0

@@ -1,0 +1,30 @@
+{
+  "n_test_cases": 100,
+  "slice_offsets": [
+    -15,
+    0,
+    15
+  ],
+  "class_distribution": {
+    "glioma": 20,
+    "meningioma": 40,
+    "notumor": 40
+  },
+  "single_slice": {
+    "accuracy": 0.95,
+    "balanced_accuracy": 0.9333333333333332,
+    "macro_f1": 0.944441729251856
+  },
+  "multi_slice_mean": {
+    "accuracy": 0.91,
+    "balanced_accuracy": 0.8666666666666667,
+    "macro_f1": 0.8858687303450575
+  },
+  "multi_slice_vote": {
+    "accuracy": 0.9,
+    "balanced_accuracy": 0.8583333333333334,
+    "macro_f1": 0.8737560064676276
+  },
+  "improvement_bacc": -0.06666666666666654,
+  "total_time_s": 23.692868334
+}
