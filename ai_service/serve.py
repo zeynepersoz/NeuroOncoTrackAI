@@ -48,6 +48,26 @@ app = FastAPI(
 )
 
 
+# ─── Startup warm-up ─────────────────────────────────────────────────────────
+# TF backbone (MobileNetV2) + RF/HGB pkl yüklemesi ilk /infer çağrısında
+# ~3 saniye sürüyor. Sunucu başlatılırken dummy tahmin yaparak bu maliyeti
+# önden ödüyoruz → sonraki çağrılar ~100 ms.
+# Devre dışı bırakmak için: AI_SERVICE_SKIP_WARMUP=1
+@app.on_event("startup")
+async def _warmup_on_startup() -> None:
+    if os.environ.get("AI_SERVICE_SKIP_WARMUP") == "1":
+        return
+    try:
+        from .warmup import warm_v3
+        stats = warm_v3()
+        print(
+            f"[serve] warm-up ok: cold={stats['first_predict_ms']}ms "
+            f"warm={stats['second_predict_ms']}ms"
+        )
+    except Exception as exc:  # pragma: no cover
+        print(f"[serve] warm-up başarısız (kritik değil): {exc}")
+
+
 # ─── Şemalar ────────────────────────────────────────────────────────────────
 class InferRequest(BaseModel):
     patient_id: str = Field(..., examples=["BRATS-GLI-00123-000"])

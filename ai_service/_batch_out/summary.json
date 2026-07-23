@@ -1,0 +1,53 @@
+{
+  "wall_time_sec": 56.06,
+  "count": {
+    "total": 355,
+    "load_error": 0,
+    "classify_ok": 355,
+    "classify_error": 0,
+    "classify_skipped": 0
+  },
+  "prediction_distribution": {
+    "glioma": 355
+  },
+  "latency_ms": {
+    "n": 355,
+    "min": 102.01,
+    "p25": 118.205,
+    "median": 121.78,
+    "p75": 124.815,
+    "max": 3348.98,
+    "mean": 129.336,
+    "stdev": 171.332
+  },
+  "tumor_volume_cm3": {
+    "n": 355,
+    "min": 5.77,
+    "p25": 38.285,
+    "median": 72.12,
+    "p75": 113.905,
+    "max": 296.36,
+    "mean": 83.188,
+    "stdev": 58.234
+  },
+  "et_wt_ratio": {
+    "n": 355,
+    "min": 0.003,
+    "p25": 0.109,
+    "median": 0.217,
+    "p75": 0.352,
+    "max": 0.94,
+    "mean": 0.249,
+    "stdev": 0.176
+  },
+  "tumor_area_ratio_2d": {
+    "n": 355,
+    "min": 0.08,
+    "p25": 0.081,
+    "median": 0.083,
+    "p75": 0.084,
+    "max": 0.091,
+    "mean": 0.083,
+    "stdev": 0.002
+  }
+}

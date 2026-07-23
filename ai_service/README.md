@@ -1,7 +1,7 @@
 # NeuroOncoTrack-AI · Unified AI Service
 
 > **TEKNOFEST 2026 — Onkolojide YZ** için birleşik AI mikroservisi.
-> Bu servis iki geliştiricinin (Mert + Zeynep) modüllerini tek çatı altında sunar.
+> Backend planı **değişmez**. Bu servis iki geliştiricinin (Mert + Zeynep) modüllerini tek çatı altında sunar.
 
 ## Mimarî
 
@@ -168,7 +168,7 @@ curl -s -X POST http://localhost:8100/infer \
 }
 ```
 
-## Backend'e entegrasyon 
+## Backend'e entegrasyon (backend planı DEĞİŞMEZ)
 
 Backend planındaki `/ai/*` endpoint'leri iç HTTP çağrısıyla bu servise proxy'lenir:
 

@@ -28,3 +28,10 @@ result.json
 # Local secrets
 .env
 .env.local
+
+# Fine-tune artefaktları (büyük — finetune_kaggle.py yeniden üretir)
+ai_service/finetuned_models_kaggle/*.pkl
+ai_service/finetuned_models_kaggle/*.npz
+
+# Kaggle raw dataset (repo dışı, mutlak path'ten okunur)
+ai_service/data/kaggle/

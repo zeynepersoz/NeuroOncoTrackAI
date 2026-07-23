@@ -1,0 +1,90 @@
+{
+  "n_total": 1600,
+  "n_load_err": 0,
+  "wall_time_sec": 136.36,
+  "confusion_matrix_kaggle4": {
+    "labels": [
+      "glioma",
+      "meningioma",
+      "notumor",
+      "pituitary"
+    ],
+    "matrix": [
+      [
+        11,
+        372,
+        17,
+        0
+      ],
+      [
+        14,
+        339,
+        47,
+        0
+      ],
+      [
+        150,
+        206,
+        44,
+        0
+      ],
+      [
+        0,
+        383,
+        17,
+        0
+      ]
+    ]
+  },
+  "confusion_matrix_v3_3class": {
+    "labels": [
+      "glioma",
+      "meningioma",
+      "notumor"
+    ],
+    "matrix": [
+      [
+        11,
+        372,
+        17
+      ],
+      [
+        14,
+        339,
+        47
+      ],
+      [
+        150,
+        206,
+        44
+      ]
+    ]
+  },
+  "per_class_v3": {
+    "glioma": {
+      "precision": 0.0629,
+      "recall": 0.0275,
+      "f1": 0.0383,
+      "support": 400
+    },
+    "meningioma": {
+      "precision": 0.3697,
+      "recall": 0.8475,
+      "f1": 0.5148,
+      "support": 400
+    },
+    "notumor": {
+      "precision": 0.4074,
+      "recall": 0.11,
+      "f1": 0.1732,
+      "support": 400
+    }
+  },
+  "accuracy_v3_pituitary_excluded": 0.3283,
+  "latency_ms": {
+    "n": 1600,
+    "min": 68.58,
+    "median": 78.3,
+    "max": 177.24
+  }
+}
