@@ -6,6 +6,7 @@ Pydantic v2 schemas for authentication endpoints.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -170,6 +171,67 @@ class SessionResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Generic message response."""
     message: str
+
+
+# ── Change Password ──────────────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    """POST /api/v1/auth/change-password"""
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=12)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
+        """Enforce password policy via core security validator."""
+        from app.core.exceptions import ValidationError
+        from app.core.security import validate_password
+        try:
+            validate_password(v)
+        except ValidationError as e:
+            raise ValueError(e.detail or e.message) from e
+        return v
+
+
+# ── Forgot Password ──────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    """POST /api/v1/auth/forgot-password"""
+    email: EmailStr
+
+
+# ── Reset Password ───────────────────────────────────────────
+
+class ResetPasswordRequest(BaseModel):
+    """POST /api/v1/auth/reset-password"""
+    token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=12)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
+        """Enforce password policy via core security validator."""
+        from app.core.exceptions import ValidationError
+        from app.core.security import validate_password
+        try:
+            validate_password(v)
+        except ValidationError as e:
+            raise ValueError(e.detail or e.message) from e
+        return v
+
+
+# ── Session Management ───────────────────────────────────────
+
+class SessionResponse(BaseModel):
+    """GET /api/v1/auth/sessions"""
+    id: uuid.UUID
+    device: str | None = None
+    ip: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    last_used_at: datetime
+    expires_at: datetime
+    current: bool = False
 
 
 # ── Forward Reference Resolution ────────────────────────────

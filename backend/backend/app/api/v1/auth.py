@@ -16,11 +16,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import aktif_kullanici, bearer_scheme
-from app.core import permissions as perms_core, redis as redis_core, security
+from app.core import audit, permissions as perms_core, redis as redis_core, security
 from app.core.config import settings
 from app.core.exceptions import (
     AccountLockedError,
@@ -32,9 +32,12 @@ from app.core.exceptions import (
 from app.db.session import get_db
 from app.models.organization import Organization
 from app.models.password_history import PasswordHistory
+from app.models.password_reset_token import PasswordResetToken
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     MFADisableRequest,
@@ -44,11 +47,29 @@ from app.schemas.auth import (
     MFAVerifyRequest,
     MessageResponse,
     RegisterRequest,
+    ResetPasswordRequest,
+    SessionResponse,
     TokenRefreshResponse,
 )
 from app.schemas.user import UserProfileResponse, UserProfileUpdate
+from app.services.email import email_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def build_session_response(sess: Session, is_current: bool = False) -> SessionResponse:
+    """Build SessionResponse safely without exposing secrets or token hashes."""
+    device_val = sess.device_fingerprint or (sess.user_agent if sess.user_agent else "Bilinmeyen Cihaz")
+    return SessionResponse(
+        id=sess.id,
+        device=device_val,
+        ip=sess.ip_address,
+        user_agent=sess.user_agent,
+        created_at=sess.created_at,
+        last_used_at=sess.last_used_at,
+        expires_at=sess.expires_at,
+        current=is_current,
+    )
 
 
 def build_user_profile_response(user: User) -> UserProfileResponse:
@@ -526,6 +547,395 @@ async def update_my_profile(
     await db.refresh(current_user)
 
     return build_user_profile_response(current_user)
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(aktif_kullanici),
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """
+    Change password for currently authenticated user.
+
+    Flow:
+    1. Verify current_password against current_user.password_hash via Argon2id.
+    2. Check new_password != current_password.
+    3. Validate new_password strength via core security validator.
+    4. Check password history (last 5 passwords) using security.validate_password_not_reused.
+    5. Save current_user.password_hash into PasswordHistory.
+    6. Hash new_password with Argon2id and update current_user.password_hash.
+    7. Revoke active refresh sessions in database for current_user.id.
+    8. Log audit event PAROLA_DEGISTIRILDI.
+    9. Return MessageResponse(message="Parola başarıyla değiştirildi.").
+    """
+    # 1. Verify current password
+    if not security.verify_password(payload.current_password, current_user.password_hash):
+        raise AuthenticationError(detail="Mevcut parola hatalı.")
+
+    # 2. Check same password
+    if payload.current_password == payload.new_password:
+        raise ValidationError(detail="Yeni parola mevcut parola ile aynı olamaz.")
+
+    # 3. Fetch password history for user (newest to oldest)
+    hist_stmt = (
+        select(PasswordHistory.password_hash)
+        .where(PasswordHistory.user_id == current_user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(5)
+    )
+    hist_result = await db.execute(hist_stmt)
+    historical_hashes = list(hist_result.scalars().all())
+
+    # 4. Check history reuse
+    security.validate_password_not_reused(
+        plain_password=payload.new_password,
+        current_password_hash=current_user.password_hash,
+        historical_hashes=historical_hashes,
+        limit=5,
+    )
+
+    # 5. Archive current password hash into history
+    old_history_entry = PasswordHistory(
+        user_id=current_user.id,
+        password_hash=current_user.password_hash,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(old_history_entry)
+
+    # 6. Update user with new password hash
+    new_hash = security.hash_password(payload.new_password)
+    current_user.password_hash = new_hash
+
+    # 7. Invalidate all active refresh sessions for this user
+    session_update_stmt = (
+        update(Session)
+        .where(
+            Session.user_id == current_user.id,
+            Session.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
+    await db.execute(session_update_stmt)
+
+    # 8. Log audit event
+    ip_addr = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    audit.log_audit_event("PAROLA_DEGISTIRILDI", current_user.id, ip_addr, user_agent)
+
+    # 9. Commit transaction
+    await db.commit()
+
+    return MessageResponse(message="Parola başarıyla değiştirildi.")
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """
+    Request password reset link.
+
+    Flow:
+    1. Normalize input email (strip and lowercase).
+    2. Lookup user by normalized email.
+    3. User Enumeration Defense: Always return identical generic message regardless of user existence.
+    4. If user exists:
+       - Generate secure random token (256-bit entropy).
+       - Hash token with SHA-256.
+       - Invalidate previous unused reset tokens for user.
+       - Store PasswordResetToken with 15-minute expiration.
+       - Send email via email_service abstraction.
+       - Log audit event PAROLA_SIFIRLAMA_TALEBI without sensitive token.
+    5. Return generic MessageResponse.
+    """
+    generic_response = MessageResponse(
+        message="Parola sıfırlama bağlantısı gönderildiyse kayıtlı e-posta adresinize gönderilmiştir."
+    )
+
+    normalized_email = payload.email.strip().lower()
+
+    # Query user
+    stmt = select(User).where(func.lower(User.email) == normalized_email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return generic_response
+
+    # Generate secure reset token
+    plain_token = security.generate_refresh_token()
+    token_hash = security.hash_token(plain_token)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=15)
+
+    # Invalidate previous unused reset tokens for user
+    await db.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+
+    # Create new reset token record
+    reset_record = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        created_at=now,
+        expires_at=expires_at,
+        used_at=None,
+    )
+    db.add(reset_record)
+
+    # Send reset link via email abstraction
+    await email_service.send_password_reset_email(user.email, plain_token)
+
+    # Log audit event
+    ip_addr = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    audit.log_audit_event("PAROLA_SIFIRLAMA_TALEBI", user.id, ip_addr, user_agent)
+
+    await db.commit()
+
+    return generic_response
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """
+    Reset password using reset token received via email.
+
+    Flow:
+    1. Hash input token using SHA-256 (security.hash_token).
+    2. Lookup PasswordResetToken by token_hash.
+    3. Validate token:
+       - If not found -> raise InvalidTokenError("Sıfırlama bağlantısı geçersiz.")
+       - If used_at is NOT None -> raise InvalidTokenError("Sıfırlama bağlantısı zaten kullanılmış.")
+       - If expires_at <= now -> raise InvalidTokenError("Sıfırlama bağlantısının süresi dolmuş.")
+    4. Lookup User by token.user_id. Check user active status.
+    5. Validate new_password strength via core security validator.
+    6. Password History Check (last 5 passwords):
+       - Fetch PasswordHistory for user_id (order_by created_at.desc(), limit 5).
+       - Check security.validate_password_not_reused.
+    7. Archive current user.password_hash into PasswordHistory.
+    8. Hash new_password with Argon2id and set user.password_hash = new_hash.
+    9. Mark reset token as used (token_record.used_at = now).
+    10. Invalidate all active database refresh sessions for user (revoked_at = now).
+    11. Log audit event PAROLA_SIFIRLANDI.
+    12. Return MessageResponse.
+    """
+    now = datetime.now(timezone.utc)
+
+    # 1. Hash input token
+    token_hash = security.hash_token(payload.token)
+
+    # 2. Query reset token record
+    stmt = select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    result = await db.execute(stmt)
+    token_record = result.scalar_one_or_none()
+
+    # 3. Validate token
+    if not token_record:
+        raise InvalidTokenError(detail="Sıfırlama bağlantısı geçersiz.")
+
+    if token_record.used_at is not None:
+        raise InvalidTokenError(detail="Sıfırlama bağlantısı zaten kullanılmış.")
+
+    # Handle timezone normalization for expires_at comparison
+    expires_at = token_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at <= now:
+        raise InvalidTokenError(detail="Sıfırlama bağlantısının süresi dolmuş.")
+
+    # 4. Lookup user
+    user_stmt = select(User).where(User.id == token_record.user_id)
+    user_result = await db.execute(user_stmt)
+    user = user_result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        raise InvalidTokenError(detail="Sıfırlama bağlantısı geçersiz.")
+
+    # 5. Fetch password history for user (limit 5)
+    hist_stmt = (
+        select(PasswordHistory.password_hash)
+        .where(PasswordHistory.user_id == user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(5)
+    )
+    hist_result = await db.execute(hist_stmt)
+    historical_hashes = list(hist_result.scalars().all())
+
+    # 6. Check history reuse
+    security.validate_password_not_reused(
+        plain_password=payload.new_password,
+        current_password_hash=user.password_hash,
+        historical_hashes=historical_hashes,
+        limit=5,
+    )
+
+    # 7. Archive current password hash into history
+    old_history_entry = PasswordHistory(
+        user_id=user.id,
+        password_hash=user.password_hash,
+        created_at=now,
+    )
+    db.add(old_history_entry)
+
+    # 8. Update user with new password hash
+    new_hash = security.hash_password(payload.new_password)
+    user.password_hash = new_hash
+
+    # 9. Mark reset token as used
+    token_record.used_at = now
+
+    # 10. Invalidate all active refresh sessions for user
+    session_update_stmt = (
+        update(Session)
+        .where(
+            Session.user_id == user.id,
+            Session.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    await db.execute(session_update_stmt)
+
+    # 11. Log audit event
+    ip_addr = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    audit.log_audit_event("PAROLA_SIFIRLANDI", user.id, ip_addr, user_agent)
+
+    # 12. Commit transaction
+    await db.commit()
+
+    return MessageResponse(message="Parolanız başarıyla sıfırlandı. Yeni parolanızla giriş yapabilirsiniz.")
+
+
+# ── Session Management Endpoints (TASK-015) ──────────────────
+
+@router.get("/sessions", response_model=list[SessionResponse])
+async def list_sessions(
+    request: Request,
+    current_user: User = Depends(aktif_kullanici),
+    db: AsyncSession = Depends(get_db),
+) -> list[SessionResponse]:
+    """
+    List active sessions for currently authenticated user.
+
+    Enforces strict user isolation: User can ONLY see their own active sessions.
+    Identifies the caller's current session based on the refresh token cookie/header.
+    Excludes revoked and expired sessions. Secrets & token hashes are NEVER exposed.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Detect current refresh token hash if present in cookie/header
+    current_cookie = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME) or request.headers.get("X-Refresh-Token")
+    current_hash = security.hash_token(current_cookie) if current_cookie else None
+
+    stmt = (
+        select(Session)
+        .where(
+            Session.user_id == current_user.id,
+            Session.revoked_at.is_(None),
+        )
+        .order_by(Session.last_used_at.desc())
+    )
+    result = await db.execute(stmt)
+    sessions = result.scalars().all()
+
+    response_list = []
+    for sess in sessions:
+        exp = sess.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp <= now:
+            continue
+
+        is_current = (current_hash is not None and sess.refresh_token_hash == current_hash)
+        response_list.append(build_session_response(sess, is_current=is_current))
+
+    return response_list
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_session(
+    session_id: uuid.UUID,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(aktif_kullanici),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """
+    Revoke a specific session belonging to the currently authenticated user.
+
+    Strict IDOR Protection: Query filters strictly by session.id AND session.user_id == current_user.id.
+    If session belongs to another user or does not exist, returns 400/404 without leaking info.
+    If the revoked session is the current session, clears refresh cookie and blacklists access token.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Strict tenant isolation & IDOR protection query
+    stmt = select(Session).where(
+        Session.id == session_id,
+        Session.user_id == current_user.id,
+    )
+    result = await db.execute(stmt)
+    sess = result.scalar_one_or_none()
+
+    if not sess:
+        raise ValidationError(detail="Oturum bulunamadı veya bu işlem için yetkiniz yok.")
+
+    if sess.revoked_at is None:
+        sess.revoked_at = now
+        sess.revocation_reason = "USER_REVOKED"
+
+    # Check if this was caller's current session
+    current_cookie = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME) or request.headers.get("X-Refresh-Token")
+    current_hash = security.hash_token(current_cookie) if current_cookie else None
+
+    if current_hash and sess.refresh_token_hash == current_hash:
+        response.delete_cookie(
+            key=settings.REFRESH_TOKEN_COOKIE_NAME,
+            httponly=True,
+            secure=settings.REFRESH_TOKEN_COOKIE_SECURE,
+            samesite=settings.REFRESH_TOKEN_COOKIE_SAMESITE,
+        )
+
+        app_obj = getattr(request, "app", None)
+        app_state = getattr(app_obj, "state", None) if app_obj else None
+        redis_client = getattr(app_state, "redis", None) if app_state else None
+
+        if credentials and credentials.credentials and redis_client:
+            try:
+                jwt_payload = security.decode_access_token(credentials.credentials)
+                jti = jwt_payload.get("jti")
+                exp = jwt_payload.get("exp")
+                if jti:
+                    now_ts = int(now.timestamp())
+                    ttl = max(exp - now_ts, 1) if exp else 3600
+                    await redis_core.blacklist_token(redis_client, jti, ttl)
+            except Exception:
+                pass
+
+    # Log audit event
+    ip_addr = request.client.host if request.client else None
+    user_agent = request.headers.get("User-Agent")
+    audit.log_audit_event("OTURUM_REVOKE", current_user.id, ip_addr, user_agent)
+
+    await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── MFA Endpoints (TASK-007) ─────────────────────────────────

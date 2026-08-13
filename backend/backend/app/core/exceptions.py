@@ -22,7 +22,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 # ── Error Codes ──────────────────────────────────────────────
@@ -99,6 +101,7 @@ class AppError(Exception):
         body: dict[str, Any] = {
             "code": self.code,
             "message": self.message,
+            "details": self.detail if self.detail is not None else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         if self.detail:
@@ -185,6 +188,49 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     )
 
 
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Global handler for FastAPI RequestValidationError -> VAL_001 standard envelope."""
+    request_id = _get_request_id(request)
+    cleaned_errors = []
+    for err in exc.errors():
+        cleaned_errors.append({
+            "loc": [str(x) for x in err.get("loc", [])],
+            "msg": str(err.get("msg", "")),
+            "type": str(err.get("type", "")),
+        })
+
+    detail_str = "; ".join([f"{'.'.join(e['loc'])}: {e['msg']}" for e in cleaned_errors])
+    body: dict[str, Any] = {
+        "code": ErrorCode.VAL_001,
+        "message": ERROR_MESSAGE_MAP[ErrorCode.VAL_001],
+        "detail": detail_str,
+        "details": cleaned_errors,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if request_id:
+        body["request_id"] = request_id
+    return JSONResponse(status_code=422, content={"error": body})
+
+
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Global handler for Starlette/FastAPI HTTPException -> standard envelope."""
+    request_id = _get_request_id(request)
+    code = ErrorCode.AUTH_002 if exc.status_code == 401 else (ErrorCode.VAL_001 if exc.status_code == 422 else "HTTP_ERROR")
+    detail_msg = str(exc.detail) if exc.detail else "İşlem başarısız."
+    body: dict[str, Any] = {
+        "code": code,
+        "message": ERROR_MESSAGE_MAP.get(code, detail_msg),
+        "detail": detail_msg,
+        "details": detail_msg,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if request_id:
+        body["request_id"] = request_id
+    return JSONResponse(status_code=exc.status_code, content={"error": body})
+
+
 def register_exception_handlers(app: Any) -> None:
     """Register all custom exception handlers on the FastAPI app."""
     app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_error_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
