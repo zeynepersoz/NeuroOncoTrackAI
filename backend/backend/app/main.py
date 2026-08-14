@@ -5,19 +5,24 @@ FastAPI application instance with middleware, exception handlers,
 and lifecycle management.
 """
 
-from __future__ import annotations
-
+import time
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_redis_client
+from app.core import redis as redis_core
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.redis import close_redis
-from app.db.session import close_db
+from app.db.session import close_db, get_db
 
 
 @asynccontextmanager
@@ -66,12 +71,98 @@ register_exception_handlers(app)
 
 # ── Health Check ─────────────────────────────────────────────
 @app.get("/health", tags=["system"])
-async def health_check():
-    """Basic health check endpoint."""
-    return {"status": "healthy", "service": settings.APP_NAME}
+async def health_check(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis: redis_core.Redis | None = Depends(get_redis_client),
+) -> dict[str, Any]:
+    """
+    Active Readiness Probe & Health Check Endpoint.
+
+    Actively checks PostgreSQL database (`SELECT 1`) and Redis (`PING`),
+    calculates component latencies, and returns structured status diagnostics.
+
+    Status logic:
+    - 200 OK (status: "healthy"): All components up
+    - 200 OK (status: "degraded"): Database up, Redis down
+    - 503 Service Unavailable (status: "unhealthy"): Database down
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    components: dict[str, dict[str, Any]] = {}
+    is_db_up = False
+    is_redis_up = False
+
+    # 1. Check Database
+    t0 = time.perf_counter()
+    try:
+        await db.execute(text("SELECT 1"))
+        latency_db = round((time.perf_counter() - t0) * 1000, 2)
+        components["database"] = {
+            "status": "up",
+            "latency_ms": latency_db,
+        }
+        is_db_up = True
+    except Exception as exc:
+        latency_db = round((time.perf_counter() - t0) * 1000, 2)
+        components["database"] = {
+            "status": "down",
+            "latency_ms": latency_db,
+            "error": str(exc),
+        }
+
+    # 2. Check Redis
+    t0 = time.perf_counter()
+    if redis is not None:
+        try:
+            await redis.ping()
+            latency_redis = round((time.perf_counter() - t0) * 1000, 2)
+            components["redis"] = {
+                "status": "up",
+                "latency_ms": latency_redis,
+            }
+            is_redis_up = True
+        except Exception as exc:
+            latency_redis = round((time.perf_counter() - t0) * 1000, 2)
+            components["redis"] = {
+                "status": "down",
+                "latency_ms": latency_redis,
+                "error": str(exc),
+            }
+    else:
+        components["redis"] = {
+            "status": "down",
+            "latency_ms": 0.0,
+            "error": "Redis client unavailable",
+        }
+
+    # 3. Determine Overall Status & Response Status Code
+    if is_db_up and is_redis_up:
+        overall_status = "healthy"
+        response.status_code = status.HTTP_200_OK
+    elif is_db_up:
+        overall_status = "degraded"
+        response.status_code = status.HTTP_200_OK
+    else:
+        overall_status = "unhealthy"
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": overall_status,
+        "service": settings.APP_NAME,
+        "environment": settings.APP_ENV,
+        "timestamp": now_iso,
+        "components": components,
+    }
+
+
+@app.get("/health/liveness", tags=["system"])
+async def liveness_check() -> dict[str, str]:
+    """Fast liveness probe for container orchestrators."""
+    return {"status": "alive", "service": settings.APP_NAME}
 
 
 # ── Router Registration ─────────────────────────────────────
 from app.api.v1.auth import router as auth_router
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+

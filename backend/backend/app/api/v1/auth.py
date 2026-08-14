@@ -19,7 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import aktif_kullanici, bearer_scheme
+from app.api.deps import aktif_kullanici, bearer_scheme, get_redis_client
 from app.core import audit, permissions as perms_core, redis as redis_core, security
 from app.core.config import settings
 from app.core.exceptions import (
@@ -27,6 +27,7 @@ from app.core.exceptions import (
     AuthenticationError,
     InvalidTokenError,
     MFARequiredError,
+    RateLimitError,
     ValidationError,
 )
 from app.db.session import get_db
@@ -164,12 +165,24 @@ async def login(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    redis: redis_core.Redis | None = Depends(get_redis_client),
 ) -> LoginResponse | MFARequiredResponse:
     """
     Authenticate user with email and password.
 
     Returns access_token (RS256 JWT) and sets HTTP-only cookie with refresh_token.
+    Enforces IP-based login rate limiting.
     """
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+
+    # Enforce login rate limit
+    if redis is not None:
+        is_allowed, attempts = await redis_core.check_rate_limit(redis, ip_addr)
+        if not is_allowed:
+            raise RateLimitError(
+                detail=f"Çok fazla başarısız giriş denemesi. Lütfen {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
+            )
+
     email_clean = payload.email.strip().lower()
 
     # Generic authentication failure to prevent user enumeration
@@ -177,6 +190,8 @@ async def login(
     user = user_res.scalar_one_or_none()
 
     if not user or not security.verify_password(payload.password, user.password_hash):
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr)
         raise AuthenticationError(detail="E-posta veya parola hatalı.")
 
     if not user.is_active:
@@ -187,6 +202,10 @@ async def login(
 
     if user.organization and not user.organization.is_active:
         raise AuthenticationError(detail="Kullanıcının bağlı olduğu kurum pasif durumda.")
+
+    # Successful credential validation — Reset rate limit counter for IP
+    if redis is not None:
+        await redis_core.reset_rate_limit(redis, ip_addr)
 
     # MFA Flow check
     if user.mfa_enabled:

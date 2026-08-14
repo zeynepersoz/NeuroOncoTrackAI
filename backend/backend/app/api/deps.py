@@ -36,6 +36,27 @@ from app.models.user import User
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+async def get_redis_client(request: Request) -> redis_core.Redis | None:
+    """
+    Dependency to resolve active Redis client.
+
+    Checks app.state.redis first (for testing/app lifecycle),
+    falling back to core get_redis() helper. Returns None if Redis is unavailable.
+    """
+    app_obj = getattr(request, "app", None)
+    app_state = getattr(app_obj, "state", None) if app_obj else None
+    redis_client = getattr(app_state, "redis", None) if app_state else None
+
+    if redis_client is not None:
+        return redis_client
+
+    try:
+        return await redis_core.get_redis()
+    except Exception:
+        return None
+
+
+
 async def aktif_kullanici(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),

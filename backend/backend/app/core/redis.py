@@ -81,14 +81,18 @@ async def check_rate_limit(redis: Redis, ip_address: str) -> tuple[bool, int]:
     Returns:
         tuple of (is_allowed, current_count)
     """
-    key = f"{RATE_LIMIT_PREFIX}{ip_address}"
-    count = await redis.get(key)
+    try:
+        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        count = await redis.get(key)
 
-    if count is None:
+        if count is None:
+            return True, 0
+
+        current = int(count)
+        return current < settings.LOGIN_RATE_LIMIT_ATTEMPTS, current
+    except Exception:
+        # Fail open gracefully if Redis is unreachable
         return True, 0
-
-    current = int(count)
-    return current < settings.LOGIN_RATE_LIMIT_ATTEMPTS, current
 
 
 async def increment_rate_limit(redis: Redis, ip_address: str) -> int:
@@ -98,23 +102,30 @@ async def increment_rate_limit(redis: Redis, ip_address: str) -> int:
     Sets a TTL window on first attempt.
     Returns the new count.
     """
-    key = f"{RATE_LIMIT_PREFIX}{ip_address}"
-    pipe = redis.pipeline()
-    pipe.incr(key)
-    pipe.ttl(key)
-    results = await pipe.execute()
+    try:
+        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        pipe = redis.pipeline()
+        pipe.incr(key)
+        pipe.ttl(key)
+        results = await pipe.execute()
 
-    new_count = results[0]
-    ttl = results[1]
+        new_count = results[0]
+        ttl = results[1]
 
-    # Set TTL only on first increment (when TTL is -1, meaning no expiry set)
-    if ttl == -1:
-        await redis.expire(key, settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES * 60)
+        # Set TTL only on first increment (when TTL is -1, meaning no expiry set)
+        if ttl == -1:
+            await redis.expire(key, settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES * 60)
 
-    return new_count
+        return new_count
+    except Exception:
+        return 0
 
 
 async def reset_rate_limit(redis: Redis, ip_address: str) -> None:
     """Reset the login rate limit counter for an IP after successful login."""
-    key = f"{RATE_LIMIT_PREFIX}{ip_address}"
-    await redis.delete(key)
+    try:
+        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        await redis.delete(key)
+    except Exception:
+        pass
+
