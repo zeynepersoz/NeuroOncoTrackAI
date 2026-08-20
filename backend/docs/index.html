@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuroOncoTrack-AI — Backend Güvenlik ve Mimari Dokümantasyon Portalı</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">🛡️</div>
+        <div class="brand-title">NeuroOncoTrack-AI — Backend Güvenlik ve Mimari Portalı</div>
+      </div>
+      <div class="header-badges">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="portalSearch" class="search-input" placeholder="Güvenlik mimarisinde ara (örn: ABAC, IDOR, JWT)...">
+        </div>
+        <span class="status-badge pass">✓ 44/44 Görev Tamamlandı</span>
+        <span class="status-badge info">🧪 495/495 Test Başarılı</span>
+      </div>
+    </header>
+
+    <div class="main-wrapper">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar">
+        <div class="nav-section">
+          <div class="nav-section-title">Genel Bakış</div>
+          <a href="#dashboard" class="nav-item active">📊 Yönetici Özeti (Dashboard)</a>
+          <a href="#concepts" class="nav-item">💡 Temel Güvenlik Kavramları</a>
+          <a href="#invariants" class="nav-item">🔒 10 Core Security Invariants</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Kimlik Doğrulama (AuthN)</div>
+          <a href="#authentication" class="nav-item">🔑 Authentication Mimari & Token</a>
+          <a href="#db-authority" class="nav-item">🏛️ DB State Authority vs JWT</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Yetkilendirme (AuthZ)</div>
+          <a href="#rbac" class="nav-item">👥 RBAC Rol & İzin Matrisi</a>
+          <a href="#permission-override" class="nav-item">⚡ Granular Permission Override</a>
+          <a href="#role-hierarchy" class="nav-item">👑 Role Hierarchy & Privilege Defense</a>
+          <a href="#abac" class="nav-item">🏢 ABAC, Tenant & Ownership</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Klinik & AI Güvenliği</div>
+          <a href="#sensitive-pipeline" class="nav-item">🩺 5-Tier Sensitive Pipeline</a>
+          <a href="#clinical-ai" class="nav-item">🤖 Klinik ve AI İşlem Kuralları</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Admin API & Sertleştirme</div>
+          <a href="#admin-api-suite" class="nav-item">🛠️ Admin Management API Suite</a>
+          <a href="#production-hardening" class="nav-item">🔒 Production Hardening & Fixes</a>
+          <a href="#audit" class="nav-item">📜 Audit Logging & DB Persistence</a>
+          <a href="#error-handling" class="nav-item">⚠️ Hata Zarfı ve Standardizasyon</a>
+          <a href="#threat-matrix" class="nav-item">🎯 15 Saldırı Senaryosu & Savunma</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Proje Haritası & Sözlük</div>
+          <a href="#task-history" class="nav-item">📋 44 Task Gelişim Geçmişi</a>
+          <a href="#file-map" class="nav-item">📁 Dosya Güvenlik Haritası</a>
+          <a href="#glossary" class="nav-item">📖 Güvenlik Terimleri Sözlüğü</a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Kullanım Rehberi & Operasyon</div>
+          <a href="#tldr-flow" class="nav-item">⚡ TL;DR Kullanım Sırası</a>
+          <a href="#super-admin-guide" class="nav-item">👑 SUPER_ADMIN Kurulumu</a>
+          <a href="#organization-guide" class="nav-item">🏢 Organization Yönetimi</a>
+          <a href="#user-guide" class="nav-item">👤 Kullanıcı Onboarding & Hiyerarşi</a>
+          <a href="#hospital-scenario" class="nav-item">🏥 Örnek Hastane Senaryosu</a>
+          <a href="#swagger-guide" class="nav-item">🌐 Swagger UI Kullanımı</a>
+          <a href="#missing-features" class="nav-item">⚠️ Manuel & Eksik İşlemler</a>
+        </div>
+      </nav>
+
+      <!-- Main Content Area -->
+      <main class="content-area">
+
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section-block">
+          <div class="section-header">
+            <h1 class="section-title">📊 Executive Security Dashboard</h1>
+            <span class="section-tag">PROD READY</span>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-title">TAMAMLANAN TASKLAR</div>
+              <div class="metric-value">44 / 44 <span class="metric-sub">100%</span></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">GÜVENLİK TESTLERİ</div>
+              <div class="metric-value">495 / 495 <span class="metric-sub">PASS</span></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">SİSTEM ROLLERİ</div>
+              <div class="metric-value">7 <span class="metric-sub">Canonical</span></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">KRİTİK GÜVENLİK AÇIĞI</div>
+              <div class="metric-value">0 <span class="metric-sub">Clean Forensic Audit</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">🛡️ Sistem Güvenlik ve Mimari Durumu</div>
+            <p>NeuroOncoTrack-AI backend altyapısında <strong>TASK-001 → TASK-044</strong> süresince sıfır bağımlılık ihlali ve sıfır regression ile kurulan üretim seviyesi güvenlik mimarisinin temel özellikleri:</p>
+            <ul style="margin-left: 20px; margin-top: 10px; color: var(--text-secondary);">
+              <li><strong>DB Authority Over JWT:</strong> İstemci JWT iddiaları yetkilendirme kararlarında otorite değildir; canlı veritabanı durumu (<code>aktif_kullanici</code>) ve Redis fail-closed DB fallback kontrol edilir.</li>
+              <li><strong>Revoked Precedence Rule:</strong> <code>revoked_permissions</code> her zaman <code>extra_permissions</code> ve <code>base_permissions</code> kurallarını ezer.</li>
+              <li><strong>Persistent DB Audit Logging:</strong> Audit kayıtları PostgreSQL <code>audit_logs</code> tablosuna yazılır. Parola, JWT, token ve MFA sırları otomatik temizlenir (Sanitized).</li>
+              <li><strong>Refresh Token Concurrency Lock:</strong> Refresh token yenileme isteğinde veritabanı row-level lock (<code>WITH FOR UPDATE</code>) uygulanır.</li>
+              <li><strong>Production Security Headers & Path-Scoped CSP:</strong> Security headers (HSTS, nosniff, DENY) ve `/docs` için Path-scoped CSP uygulanmıştır.</li>
+              <li><strong>Strict DTO Input Validation:</strong> Request DTO'larında <code>extra="forbid"</code> kullanılarak tanım dışı girdi saldırılarına karşı `HTTP 422` verilir.</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- TEMEL KAVRAMLAR -->
+        <section id="concepts" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">💡 Temel Güvenlik Kavramları ve Sorular</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">1. Authentication (Kimlik Doğrulama) vs Authorization (Yetkilendirme)</div>
+            <p><strong>Authentication (Kimlik Doğrulama):</strong> "Sistemdeki bu kullanıcı gerçekten söylediği kişi mi?" sorusunun cevabıdır (Parola, JWT Token, MFA TOTP kontrolü).</p>
+            <p style="margin-top: 8px;"><strong>Authorization (Yetkilendirme):</strong> "Kimliği doğrulanmış bu kullanıcının hedef kaynak üzerinde bu işlemi yapmaya yetkisi var mı?" sorusunun cevabıdır (RBAC, ABAC, Permission kontrolleri).</p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">2. RBAC (Rol Tabanlı Erişim Kontrolü) vs ABAC (Öznitelik Tabanlı Erişim Kontrolü)</div>
+            <p><strong>RBAC:</strong> Erişimi kullanıcının sistemdeki rolüne (<code>PHYSICIAN</code>, <code>HOSPITAL_ADMIN</code>) ve role atanmış izinlere göre yönetir.</p>
+            <p style="margin-top: 8px;"><strong>ABAC:</strong> Erişimi kaynağın ve kullanıcının özniteliklerine (<code>organization_id</code>, <code>owner_id</code>) göre dinamik olarak kısıtlar. Örneğin bir doktor sadece kendi hastanesindeki (Tenant Isolation) ve kendi atandığı hastanın (Ownership) kayıtlarını okuyabilir.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">3. Fail-Closed Security İlkesi</div>
+            <p>Sistemde herhangi bir bilgi eksikse, parametre tanımlanmamışsa veya beklenmeyen bir durum oluşursa varsayılan karar **DENY (Erişimi Engelle)** olur. Güvenlik açığı oluşmaması için asla varsayılan olarak geçit verilmez (Fail-Open engellenmiştir).</p>
+          </div>
+        </section>
+
+        <!-- 10 CORE SECURITY INVARIANTS -->
+        <section id="invariants" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🔒 10 Core Security Invariants (Sistem Değişmezleri)</h2>
+          </div>
+
+          <div class="data-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Invariant ID</th>
+                  <th>Güvenlik Kuralı (Invariant)</th>
+                  <th>Açıklama ve Neden Gerekli?</th>
+                  <th>Uygulama Konumu</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>INVARIANT 1</strong></td>
+                  <td>Revoked Precedence Rule</td>
+                  <td><code>revoked_permissions</code> içerisinde yer alan bir izin hiçbir koşulda <code>extra_permissions</code> veya <code>base</code> ile aktifleşemez. Revoked kesinlikle kazanır.</td>
+                  <td><code>app/core/permissions.py</code> (<code>get_effective_permissions</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 2</strong></td>
+                  <td>Cross-Tenant Isolation</td>
+                  <td>Süper admin dışındaki hiçbir rol kendi organizasyonu dışındaki bir kaynağa erişemez.</td>
+                  <td><code>app/core/permissions.py</code> (<code>verify_organization_access</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 3</strong></td>
+                  <td>Self Escalation Defense</td>
+                  <td>Kullanıcılar kendi rollerini veya kendi izinlerini kendi kendilerine değiştiremez ve yükseltemez.</td>
+                  <td><code>app/api/deps.py</code> (<code>rol_atamasi_kontrolu</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 4</strong></td>
+                  <td>Role Rank Hierarchy</td>
+                  <td>Rol atamasında <code>actor_level > target_level</code> ve <code>actor_level > current_target_level</code> kuralı zorunludur.</td>
+                  <td><code>app/core/permissions.py</code> (<code>can_assign_role</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 5</strong></td>
+                  <td>Payload Spoofing Defense</td>
+                  <td>İstemciden (Request Body/Query/Header) gelen <code>organization_id</code> bilgisine güvenilmez, veritabanından doğrulanır.</td>
+                  <td><code>app/api/deps.py</code> (<code>kurum_izolasyonu_kontrolu</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 6</strong></td>
+                  <td>Owner Spoofing Defense</td>
+                  <td>İstemciden gelen <code>owner_id</code> bilgisi yetki kararlarını etkileyemez, veritabanı kaynağının gerçek sahibi doğrulanır.</td>
+                  <td><code>app/api/deps.py</code> (<code>sahip_veya_admin_kontrolu</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 7</strong></td>
+                  <td>Super Admin Auth Strictness</td>
+                  <td><code>SUPER_ADMIN</code> organizasyon sınırlarını bypass edebilir fakat Kimlik Doğrulama (AuthN) kuralını bypass edemez.</td>
+                  <td><code>app/api/deps.py</code> (<code>aktif_kullanici</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 8</strong></td>
+                  <td>Super Admin Permission Strictness</td>
+                  <td><code>SUPER_ADMIN</code> açıkça iptal edilmiş (revoked) bir izni bypass edemez.</td>
+                  <td><code>app/api/deps.py</code> (<code>hassas_klinik_ve_ai_islem_kontrolu</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 9</strong></td>
+                  <td>Missing Attribute Fail-Closed</td>
+                  <td>Eksik <code>user_id</code>, <code>organization_id</code> veya <code>role</code> durumlarında erişim derhal reddedilir.</td>
+                  <td><code>app/core/permissions.py</code> (<code>check_abac_access</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+                <tr>
+                  <td><strong>INVARIANT 10</strong></td>
+                  <td>Live DB Authority Over Stale JWT</td>
+                  <td>JWT içerisindeki eski role/perm iddiaları geçersizdir; canlı veritabanı kullanıcı durumu (<code>aktif_kullanici</code>) esastır.</td>
+                  <td><code>app/api/deps.py</code> (<code>aktif_kullanici</code>)</td>
+                  <td><span class="status-badge pass">PASS</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- AUTHENTICATION MIMARI -->
+        <section id="authentication" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🔑 Authentication Mimari ve Token Yönetimi</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Token Yaşam Döngüsü ve Güvenlik Altyapısı</div>
+            <p>Projede kimlik doğrulama işlemi <strong>Argon2id Password Hashing</strong>, <strong>Dual-Token Architecture (Access + Refresh Token)</strong>, <strong>TOTP MFA</strong> ve <strong>Redis Token Blacklist</strong> ile koruma altına alınmıştır.</p>
+            <div class="mermaid">
+              graph TD
+                A[Client Login Request] --> B{Argon2id Hash Verify}
+                B -->|Invalid| C[HTTP 401 AUTH_001]
+                B -->|Valid| D{MFA Enabled?}
+                D -->|Yes| E[Verify TOTP Code]
+                D -->|No / Verified| F[Issue JWT Access & Refresh Token]
+                F --> G[Store Refresh Token Session in DB & Redis]
+            </div>
+          </div>
+        </section>
+
+        <!-- DB AUTHORITY -->
+        <section id="db-authority" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🏛️ Veritabanı Otoritesi (Database Authority over JWT)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Neden JWT IdDialarına (Claims) Güvenilmez?</div>
+            <p>Bir kullanıcı giriş yaptığında kendisine 15 dakika geçerli bir JWT Access Token verilir. Ancak kullanıcı oturum açtıktan 1 dakika sonra bir Hospital Admin tarafından rolü düşürülebilir (örneğin <code>HOSPITAL_ADMIN</code> → <code>AUDITOR</code>) veya bir izni iptal edilebilir (<code>revoked_permissions</code>).</p>
+            <p style="margin-top: 10px;">Eğer backend sadece JWT içerisindeki <code>role</code> idddiasına güvenseydi (Stale JWT Attack), yetkisi alınan kullanıcı 14 dakika boyunca yetkisiz işlemleri yapmaya devam edebilirdi. Bu yüzden <code>aktif_kullanici</code> dependency'miz JWT'den sadece <code>user_id</code> (subject) alır ve kullanıcının anlık rol/izin/kilitli durumunu canlı veritabanından sorgular.</p>
+          </div>
+        </section>
+
+        <!-- RBAC ROLE & PERMISSION MATRIX -->
+        <section id="rbac" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">👥 RBAC Rol ve İzin Matrisi (Role & Permission Registry)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">7 Canonical Sistem Rolü</div>
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Rol (Role Enum)</th>
+                    <th>Hiyerarşi Seviyesi</th>
+                    <th>Kapsam (Scope)</th>
+                    <th>Tanım ve Temel Yetkiler</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>SUPER_ADMIN</code></td>
+                    <td>100</td>
+                    <td>Global (Multi-Tenant Bypass)</td>
+                    <td>Sistem kurucusu. Tüm yetkilere sahiptir. Kurum sınırlarını aşabilir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>HOSPITAL_ADMIN</code></td>
+                    <td>80</td>
+                    <td>Own Organization</td>
+                    <td>Hastane yöneticisi. Kendi kurumundaki kullanıcı ve doktorları yönetir. Tıbbi rapor imzalayamaz.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PHYSICIAN</code></td>
+                    <td>50</td>
+                    <td>Own Assigned Cases</td>
+                    <td>Uzman Hekim. Hasta kaydı oluşturur, AI analizi çalıştırır, tıbbi rapor onaylar ve imzalar (<code>report:sign</code>).</td>
+                  </tr>
+                  <tr>
+                    <td><code>RADIOLOGY_TECH</code></td>
+                    <td>50</td>
+                    <td>Own Assigned Scans</td>
+                    <td>Radyoloji Teknisyeni. Görüntüleme çalışması (DICOM) yükler ve okur. Rapor imzalayamaz.</td>
+                  </tr>
+                  <tr>
+                    <td><code>RESEARCHER</code></td>
+                    <td>50</td>
+                    <td>Anonymized Scope</td>
+                    <td>Araştırmacı. Anonimleştirilmiş hasta verilerini (<code>patient:read_anonymized</code>) analiz eder. PHI verisi göremez.</td>
+                  </tr>
+                  <tr>
+                    <td><code>AUDITOR</code></td>
+                    <td>50</td>
+                    <td>Read-Only Audit Scope</td>
+                    <td>Denetçi. Sistem ve güvenlik audit loglarını inceler. Değişiklik yapamaz.</td>
+                  </tr>
+                  <tr>
+                    <td><code>SERVICE</code></td>
+                    <td>50</td>
+                    <td>Machine-to-Machine Integration</td>
+                    <td>Entegrasyon servisi. FHIR sync ve sistem veri aktarımı işlemlerini gerçekleştirir.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- PRECEDENCE DIAGRAM -->
+        <section id="permission-override" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">⚡ İzin Çözümleme Mantığı (Precedence Rules)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">REVOKED > EXTRA > BASE Çözümleme Çarkı</div>
+            <pre><code>effective_permissions = (BASE_PERMISSIONS[role] + extra_permissions) - revoked_permissions</code></pre>
+            <div class="mermaid">
+              graph LR
+                A[Role Base Permissions] --> C{Effective Permissions}
+                B[Extra Permissions] --> C
+                D[Revoked Permissions] -.->|ALWAYS OVERRIDES / REMOVES| C
+            </div>
+          </div>
+        </section>
+
+        <!-- ROLE HIERARCHY & PRIVILEGE ESCALATION DEFENSE -->
+        <section id="role-hierarchy" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">👑 Role Hierarchy ve Privilege Escalation Savunması</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Hiyerarşik Rol Atama Kuralı</div>
+            <p>Bir kullanıcının başka bir kullanıcıya rol atayabilmesi için aşağıdaki 2 kuralın aynı anda sağlanması zorunludur:</p>
+            <pre><code>actor_level > target_level  AND  actor_level > current_target_level</code></pre>
+            <ul style="margin-left: 20px; margin-top: 10px; color: var(--text-secondary);">
+              <li><code>HOSPITAL_ADMIN</code> (80), bir kullanıcıyı <code>PHYSICIAN</code> (50) yapabilir.</li>
+              <li><code>HOSPITAL_ADMIN</code> (80), bir kullanıcının rolünü <code>SUPER_ADMIN</code> (100) seviyesine yükseltemez (Deny / HTTP 403).</li>
+              <li>Hiçbir kullanıcı kendi rolünü değiştiremez (Self-role modification engellenmiştir).</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ABAC & TENANT ISOLATION -->
+        <section id="abac" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🏢 ABAC, Tenant Izolasyonu ve IDOR Koruması</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Multi-Tenant Izolasyonu ve Kaynak Sahipliği</div>
+            <div class="mermaid">
+              graph TD
+                Req[Request to Resource] --> Auth{Authenticated?}
+                Auth -->|No| R401[401 Unauthorized]
+                Auth -->|Yes| Perm{Permission Granted?}
+                Perm -->|No| R403[403 Forbidden]
+                Perm -->|Yes| OrgCheck{User Org == Resource Org?}
+                OrgCheck -->|No & Non-SuperAdmin| R403_Tenant[403 Tenant Isolation Denied]
+                OrgCheck -->|Yes / SuperAdmin| OwnerCheck{Is Owner OR HospAdmin?}
+                OwnerCheck -->|No| R403_Owner[403 Ownership Denied]
+                OwnerCheck -->|Yes| PASS[200 OK - Access Granted]
+            </div>
+          </div>
+        </section>
+
+        <!-- 5-TIER SENSITIVE PIPELINE -->
+        <section id="sensitive-pipeline" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🩺 5-Tier Sensitive Action Pipeline</h2>
+          </div>
+
+          <div class="pipeline-flow">
+            <div class="pipeline-step tier-1">
+              <span class="tier-num">TIER 1</span>
+              <div class="tier-info">
+                <h4>Authentication & Active User Verification</h4>
+                <p>Kullanıcının token'ı geçerli mi? Kullanıcı veritabanında aktif mi ve hesabı kilitli değil mi?</p>
+              </div>
+            </div>
+            <div class="pipeline-step tier-2">
+              <span class="tier-num">TIER 2</span>
+              <div class="tier-info">
+                <h4>RBAC Permission Check (Base + Extra - Revoked)</h4>
+                <p>Kullanıcının anlık etkili izinleri içerisinde hedef izin (örn: <code>report:sign</code>) yer alıyor mu?</p>
+              </div>
+            </div>
+            <div class="pipeline-step tier-3">
+              <span class="tier-num">TIER 3</span>
+              <div class="tier-info">
+                <h4>Medical Role Policy Check</h4>
+                <p>Tıbbi kural kontrolü. Örn: Tıbbi rapor imzalama (<code>report:sign</code>) izni extra verilmş olsa dahi rol <code>PHYSICIAN</code> değilse reddedilir.</p>
+              </div>
+            </div>
+            <div class="pipeline-step tier-4">
+              <span class="tier-num">TIER 4</span>
+              <div class="tier-info">
+                <h4>Tenant / Organization Isolation Check</h4>
+                <p>Kullanıcı ile erişilmek istenen tıbbi kaynağın <code>organization_id</code> değerleri eşleşiyor mu?</p>
+              </div>
+            </div>
+            <div class="pipeline-step tier-5">
+              <span class="tier-num">TIER 5</span>
+              <div class="tier-info">
+                <h4>Resource Ownership & Scope Check</h4>
+                <p>Kullanıcı vakanın sahibi mi yoksa kurum yöneticisi yetkisine mi sahip?</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CLINICAL & AI AUTHORIZATION -->
+        <section id="clinical-ai" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🤖 Klinik ve AI İşlemleri Güvenlik Kuralları</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Yapay Zeka ve Klinik Yetki Kuralları</div>
+            <p>Sistemdeki AI modelleri (Segmentasyon, Sanal Biyopsi, Açıklanabilir AI - XAI) hassas tıbbi işlemler sınıfındadır. Endpoint seviyesinde <code>hassas_klinik_ve_ai_islem_kontrolu()</code> helper'ı ile korunurlar:</p>
+            <pre><code>@router.post("/ai/segmentation")
+async def run_ai_segmentation(
+    user: User = Depends(hassas_klinik_ve_ai_islem_kontrolu(Permission.AI_RUN_SEGMENTATION))
+):
+    ...</code></pre>
+          </div>
+        </section>
+
+        <!-- ADMIN MANAGEMENT API SUITE (TASK-026 -> TASK-038) -->
+        <section id="admin-api-suite" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🛠️ Admin Management API Suite (TASK-026 → TASK-038)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Tüm Admin ve Yönetim Endpoint'leri Tablosu</div>
+            <p>Sistemdeki tüm kullanıcı yönetimi, organizasyon yönetimi, oturum sonlandırma, izin override ve güvenlik metrikleri endpoint'lerinin tam listesi:</p>
+
+            <div class="data-table-container" style="margin-top: 15px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Kategori</th>
+                    <th>HTTP Method</th>
+                    <th>Endpoint Path</th>
+                    <th>Yetkili Rol & İzin</th>
+                    <th>İşlev ve Güvenlik Kuralı</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- User Lifecycle -->
+                  <tr>
+                    <td rowspan="11"><strong>Kullanıcı Yönetimi (User Directory)</strong></td>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/users</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:list</code>)</td>
+                    <td>Kullanıcıları listeler. Tenant isolation kuralına göre HOSPITAL_ADMIN sadece kendi kurumunu görür.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:create</code>)</td>
+                    <td>Yeni kullanıcı ekler. Passcode girilmez; 24 saat geçerli <code>setup_token</code> döner. Hiyerarşi kuralı uygulanır.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:read</code>)</td>
+                    <td>Kullanıcı detay profilini görüntüler. Kurum sınırları doğrulanır.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PATCH</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:update</code>)</td>
+                    <td>Kullanıcı profil bilgilerini (ad, soyad, unvan) günceller. Rol/şifre değiştirilemez.</td>
+                  </tr>
+                  <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:delete</code>)</td>
+                    <td>Kullanıcı hesabını arşivler/soft-delete eder. Kendini silme engellenmiştir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/lock</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:lock</code>)</td>
+                    <td>Kullanıcı hesabını dondurur/kilitler. Kendi hesabını kilitleme engellenmiştir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/unlock</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:lock</code>)</td>
+                    <td>Kilitli kullanıcının kilidini açar, hatalı giriş sayacını sıfırlar.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/activate</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:update</code>)</td>
+                    <td>Deaktif kullanıcı hesabını tekrar aktif hale getirir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/deactivate</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:update</code>)</td>
+                    <td>Kullanıcı hesabını deaktif eder. Aktif oturumları otomatik iptal edilir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PUT</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/role</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcının sistem rolünü değiştirir. Hiyerarşik rank kontrolü (<code>can_assign_role</code>) uygulanır.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/force-logout</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:lock</code>)</td>
+                    <td>Hedef kullanıcının tüm aktif oturumlarını zorla kapatır. Redis ve DB kilitlenir.</td>
+                  </tr>
+
+                  <!-- Permission Management -->
+                  <tr>
+                    <td rowspan="5"><strong>İzin Yönetimi (Permission Override)</strong></td>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/permissions</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcının base, extra, revoked ve net hesaplanmış izinlerini gösterir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/permissions/extra</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcıya özel <code>extra_permissions</code> ekler. Audit kaydı oluşturur.</td>
+                  </tr>
+                  <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/permissions/extra/{permission}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcının özel ekstra iznini kaldırır.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/permissions/revoked</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcıya özel <code>revoked_permissions</code> ekler (İzni kesin olarak kısıtlar).</td>
+                  </tr>
+                  <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/v1/admin/users/{user_id}/permissions/revoked/{permission}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>role:assign</code>)</td>
+                    <td>Kullanıcının izin kısıtlamasını kaldırır.</td>
+                  </tr>
+
+                  <!-- Organization Management -->
+                  <tr>
+                    <td rowspan="5"><strong>Organizasyon Yönetimi (Tenant Management)</strong></td>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/organizations</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Kurumları listeler. HOSPITAL_ADMIN sadece kendi kurumunu görür.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/organizations</code></td>
+                    <td><code>SUPER_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Yeni organizasyon oluşturur. Sadece SUPER_ADMIN çağırabilir. Code benzersizlik kontrolü yapılır.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/organizations/{org_id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Kurum detaylarını ve aktif kullanıcı sayısını görüntüler.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PATCH</code></td>
+                    <td><code>/api/v1/admin/organizations/{org_id}</code></td>
+                    <td><code>SUPER_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Kurum adını, açıklamasını ve türünü günceller.</td>
+                  </tr>
+                  <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/v1/admin/organizations/{org_id}</code></td>
+                    <td><code>SUPER_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Kurumu deaktif eder/soft-delete yapar. Bağlı kullanıcıların erişimini dondurur.</td>
+                  </tr>
+
+                  <!-- Session Governance -->
+                  <tr>
+                    <td rowspan="3"><strong>Oturum Yönetimi (Session Governance)</strong></td>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/sessions</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>Aktif oturumları IP, cihaz, user_agent ve son kullanım bilgisiyle listeler.</td>
+                  </tr>
+                  <tr>
+                    <td><code>DELETE</code></td>
+                    <td><code>/api/v1/admin/sessions/{session_id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>user:lock</code>)</td>
+                    <td>Spesifik bir oturumu uzaktan sonlandırır. Redis blacklist eklenir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST</code></td>
+                    <td><code>/api/v1/admin/sessions/purge</code></td>
+                    <td><code>SUPER_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Süresi dolmuş eski oturum kayıtlarını veritabanından temizler.</td>
+                  </tr>
+
+                  <!-- Audit & Security Dashboard -->
+                  <tr>
+                    <td rowspan="6"><strong>Audit ve Güvenlik İzleme (Security Dashboard)</strong></td>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/audit-logs</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>PostgreSQL `audit_logs` tablosundaki kayıtları filtrelenmiş şekilde listeler. Tenant isolation kuralı aktiftir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/audit-logs/{id}</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>Tekil audit log detayını gösterir. Hassas veriler sansürlenmiştir.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/security/overview</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>Kullanıcı, oturum, kilitli hesap ve güvenlik olayları genel özet istatistikleri.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/security/events</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>Kritik güvenlik olaylarını (başarısız giriş, yetki reddi, kilitlenme) listeler.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/security/trends</code></td>
+                    <td><code>SUPER_ADMIN</code>, <code>HOSPITAL_ADMIN</code> (<code>audit:read</code>)</td>
+                    <td>Zaman bazlı (saatlik, günlük, haftalık) güvenlik olay trend grafikleri sunar.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GET</code></td>
+                    <td><code>/api/v1/admin/security/organizations</code></td>
+                    <td><code>SUPER_ADMIN</code> (<code>system:config</code>)</td>
+                    <td>Kurum bazında güvenlik olayları ve kullanıcı dağılım metriklerini listeler.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- PRODUCTION SECURITY HARDENING (TASK-040 -> TASK-044) -->
+        <section id="production-hardening" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🔒 Production Security Hardening & Forensic Audit Fixes (TASK-040 → TASK-044)</h2>
+          </div>
+
+          <div class="threat-grid">
+            <div class="threat-card" style="border-left: 4px solid #10b981;">
+              <div class="threat-title">TASK-040: Redis Outage Single-Token Logout Fail-Closed</div>
+              <div class="threat-desc">Redis servisi çöktüğünde veya ulaşılamadığında single-token logout işleminin sessizce iptal olmaması sağlandı.</div>
+              <div class="threat-defense">Çözüm: JWT içerisindeki `sid` (session_id) claim'i ile veritabanı `sessions` tablosunda `revoked_at = NOW()` fallback işlemi gerçekleştirilir. Redis kapalı olsa dahi oturum iptal edilir.</div>
+            </div>
+
+            <div class="threat-card" style="border-left: 4px solid #10b981;">
+              <div class="threat-title">TASK-041: Persistent Database Audit Logging</div>
+              <div class="threat-desc">In-memory Python listesinde saklanan ve restart sonrasında kaybolan audit logları veritabanına taşındı.</div>
+              <div class="threat-defense">Çözüm: `AuditLog` SQLAlchemy modeli ve Alembic `002_audit_logs.py` migration'ı yazıldı. Asenkron DB persistence ve sanitization eklendi.</div>
+            </div>
+
+            <div class="threat-card" style="border-left: 4px solid #10b981;">
+              <div class="threat-title">TASK-042: Refresh Token Concurrency Lock & Rate Limiting</div>
+              <div class="threat-desc">Eşzamanlı refresh isteklerinde oluşan race-condition (yarış durumu) ve brute-force denemeleri engellendi.</div>
+              <div class="threat-defense">Çözüm: Refresh isteğinde veritabanı row-level lock (`select(Session)...with_for_update()`) uygulandı. `/login`, `/refresh`, `/forgot-password`, `/reset-password` endpoint'lerine rate limiter eklendi.</div>
+            </div>
+
+            <div class="threat-card" style="border-left: 4px solid #10b981;">
+              <div class="threat-title">TASK-043: Production Security Headers & Path-Scoped CSP</div>
+              <div class="threat-desc">HSTS, X-Frame-Options, X-Content-Type-Options güvenlik başlıkları eklendi ve Swagger UI CSP uyumluluğu çözüldü.</div>
+              <div class="threat-defense">Çözüm: Normal API endpoint'leri için sıkı `default-src 'self'` CSP politikası korunurken, `/docs` ve `/redoc` rotaları için path-scoped CDN CSS/JS izinleri uygulandı.</div>
+            </div>
+
+            <div class="threat-card" style="border-left: 4px solid #10b981;">
+              <div class="threat-title">TASK-044: DTO Strict Input Validation (extra="forbid")</div>
+              <div class="threat-desc">İstemciden gönderilen beklenmeyen payload parametreleriyle (Mass Assignment / Unwhitelisted field injection) veri sızdırma engellendi.</div>
+              <div class="threat-defense">Çözüm: Tüm istek DTO'larına `model_config = ConfigDict(extra="forbid")` uygulandı. Tanımsız alan içeren istekler `HTTP 422 Unprocessable Entity` döner.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- AUDIT LOGGING -->
+        <section id="audit" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">📜 Audit Logging ve Hassas Veri Temizleme (Sanitization)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Sanitized Audit Logging Altyapısı</div>
+            <p>Tüm yetkilendirme kararları, yetki yükseltme denemeleri ve kural ihlalleri <code>log_authorization_event()</code> ile kayıt altına alınır.</p>
+            <p style="margin-top: 8px;"><strong>SIFIR HASSAS VERİ SIZINTISI POLİTİKASI:</strong> Audit detaylarından <code>password</code>, <code>password_hash</code>, <code>access_token</code>, <code>refresh_token</code>, <code>jwt</code>, <code>mfa_secret</code>, <code>totp_secret</code> ve <code>api_key</code> alanları otomatik olarak sansürlenir (Sanitized).</p>
+          </div>
+        </section>
+
+        <!-- ERROR HANDLING -->
+        <section id="error-handling" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">⚠️ Hata Zarfı ve Standardizasyon</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Standart HTTP Hata Yanıtı Envelope</div>
+            <pre><code>{
+  "error": {
+    "code": "AUTH_003",
+    "message": "Erişim Engellendi",
+    "detail": "Bu işlem için gerekli izne sahip değilsiniz: 'report:sign'.",
+    "details": null,
+    "timestamp": "2026-08-14T17:50:00.000Z"
+  }
+}</code></pre>
+          </div>
+        </section>
+
+        <!-- THREAT MATRIX -->
+        <section id="threat-matrix" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🎯 15 Saldırı Senaryosu ve Savunma Mekanizmaları</h2>
+          </div>
+
+          <div class="threat-grid">
+            <div class="threat-card">
+              <div class="threat-title">1. Patient IDOR Attack</div>
+              <div class="threat-desc">Saldırgan URL'deki hasta ID'sini değiştirerek başka hastanın raporunu okumaya çalışır.</div>
+              <div class="threat-defense">Savunma: Tier 4 Tenant & Tier 5 Ownership kontrolü talebi 403 Forbidden ile engeller.</div>
+            </div>
+
+            <div class="threat-card">
+              <div class="threat-title">2. Stale JWT Role Attack</div>
+              <div class="threat-desc">Rolü düşürülen kullanıcı eski JWT token'ı ile admin işlemi yapmaya çalışır.</div>
+              <div class="threat-defense">Savunma: DB Authority kuralı uyarınca canlı kullanıcı durumu DB'den sorgulanır ve talep engellenir.</div>
+            </div>
+
+            <div class="threat-card">
+              <div class="threat-title">3. Self Privilege Escalation</div>
+              <div class="threat-desc">Hospital Admin kendi kullanıcı ID'sine SUPER_ADMIN rolü atamaya çalışır.</div>
+              <div class="threat-defense">Savunma: rol_atamasi_kontrolu() aktör ile hedef kullanıcı aynı ise işlemi engeller.</div>
+            </div>
+
+            <div class="threat-card">
+              <div class="threat-title">4. Revoked Permission Bypass</div>
+              <div class="threat-desc">İzni iptal edilen kullanıcı extra_permissions parametresi ekleterek kısıtlamayı delmeye çalışır.</div>
+              <div class="threat-defense">Savunma: Revoked Precedence Rule uyarınca revoked her zaman ekstra izni ezer.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TASK HISTORY -->
+        <section id="task-history" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">📋 44-Task Proje Gelişim Geçmişi</h2>
+          </div>
+
+          <div class="timeline">
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-001 → TASK-017: Authentication & Core Cryptographic Foundation</div>
+              <div class="timeline-details">Argon2id parola hashleme, Dual-token RS256 JWT mimarisi, Redis blacklist, TOTP MFA, IP bazlı Oran Sınırlama (Rate Limiting) ve Hata Standardizasyonu tamamlandı.</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-018 → TASK-023: RBAC & ABAC Core Architecture</div>
+              <div class="timeline-details">7 sistem rolü, 45+ izin, Revoked precedence kuralı (`revoked > extra`), DB otoritesi, Role hierarchy rank kontrolü, Admin permission override API ve Audit logging kuruldu.</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-024 → TASK-025: 5-Tier Sensitive Pipeline & Combinatorial Matrix</div>
+              <div class="timeline-details">5-Tier klinik ve AI güvenlik hattı kuruldu. 10 Core Security Invariant doğrulandı. 292 testin tamamı %100 başarıyla tamamlandı.</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-026 → TASK-038: Comprehensive Admin Management & Governance Suite</div>
+              <div class="timeline-details">Kullanıcı dizini, kullanıcı kilit/açma/aktifleştirme/arşivleme yaşam döngüsü, organizasyon yönetimi, oturum sonlandırma (force logout & session purge), granular permission override ve güvenlik analitik dashboard'u tamamlandı.</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-039: Full Backend Security Forensic Audit</div>
+              <div class="timeline-details">Authentication, Session, Tenant Isolation, Concurrency, exposure ve configuration konularında 28 bağımsız güvenlik bulgusu kod seviyesinde forensic audit ile incelendi ve doğrulandı.</div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-marker"></div>
+              <div class="timeline-title">TASK-040 → TASK-044: Production Security Hardening & Swagger CSP Fix</div>
+              <div class="timeline-details">Redis outage durumunda single-token logout DB fallback, PostgreSQL kalıcı DB audit logging (`AuditLog` + Alembic `002_audit_logs.py`), refresh token concurrency locking (`with_for_update`), production security headers, path-scoped Swagger UI CSP uyumluluğu ve strict DTO validation (`extra="forbid"`) tamamlandı. 495 test %100 başarıyla geçti.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- FILE MAP -->
+        <section id="file-map" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">📁 Mimari Dosya Haritası</h2>
+          </div>
+
+          <div class="data-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Dosya Yolu</th>
+                  <th>Güvenlik Sorumluluğu ve Görevi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>backend/app/core/permissions.py</code></td>
+                  <td>Role enum, Permission enum, ROLE_PERMISSIONS matrisi, Precedence mantığı (`revoked > extra`), Role hierarchy rank kontrolleri, ABAC tenant isolation ve ownership fonksiyonları.</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/api/deps.py</code></td>
+                  <td><code>aktif_kullanici</code>, <code>izin_gerektir</code>, <code>rol_gerektir</code>, kurum izolasyon kontrolleri ve 5-Tier <code>hassas_klinik_ve_ai_islem_kontrolu</code>.</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/core/audit.py</code></td>
+                  <td>Kalıcı veritabanı denetim günlüğü (Persistent Audit logging), asenkron DB persistence ve hassas veri maskeleme (Sanitization).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/models/audit_log.py</code></td>
+                  <td>SQLAlchemy kalıcı `AuditLog` veritabanı modeli (UUID id, event, actor_id, tenant organization_id, details JSONB).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/db/migrations/versions/002_audit_logs.py</code></td>
+                  <td>Alembic migration dosyası (Veritabanında `audit_logs` tablosunu oluşturan migration).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/api/v1/admin.py</code></td>
+                  <td>Comprehensive Admin API Suite (Kullanıcı dizini ve yaşam döngüsü, organizasyon yönetimi, oturum sonlandırma, izin override ve security dashboard).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/schemas/admin.py</code></td>
+                  <td>Admin istek/yanıt DTO şemaları (Strict DTO validation <code>extra="forbid"</code> ile tanım dışı girdi koruması).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/schemas/auth.py</code> & <code>app/schemas/user.py</code></td>
+                  <td>Kimlik doğrulama ve kullanıcı DTO şemaları (Strict input validation <code>extra="forbid"</code> koruması).</td>
+                </tr>
+                <tr>
+                  <td><code>backend/app/main.py</code></td>
+                  <td>FastAPI uygulama girişi, middleware konfigürasyonları ve Path-scoped Production Security Headers (Docs CSP Istisnası).</td>
+                </tr>
+                <tr>
+                  <td><code>BACKEND_USER_GUIDE.md</code></td>
+                  <td>Backend kullanım rehberi, veritabanı kurulum script'leri, endpoint kılavuzu ve operasyon el kitabı.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- GLOSSARY -->
+        <section id="glossary" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">📖 Güvenlik Terimleri Sözlüğü (Glossary)</h2>
+          </div>
+
+          <div class="card">
+            <p><strong>RBAC (Role-Based Access Control):</strong> Rol Tabanlı Erişim Kontrolü.</p>
+            <p style="margin-top: 6px;"><strong>ABAC (Attribute-Based Access Control):</strong> Öznitelik Tabanlı Erişim Kontrolü.</p>
+            <p style="margin-top: 6px;"><strong>IDOR (Insecure Direct Object Reference):</strong> Doğrudan Nesne Referansı Güvenlik Açığı.</p>
+            <p style="margin-top: 6px;"><strong>Fail-Closed:</strong> Hata veya belirsizlik durumunda kapatma/engelleme yaklaşımı.</p>
+          </div>
+        </section>
+
+        <!-- TL;DR KULLANIM SIRASI -->
+        <section id="tldr-flow" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">⚡ TL;DR — Sistemi Kullanmak İçin Doğru İşlem Sırası</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Gerçek Mimari Gereksinimlerine Göre Kullanım Akışı</div>
+            <ol style="margin-left: 20px; margin-top: 10px; line-height: 1.8; color: var(--text-secondary);">
+              <li><strong>Manuel Veritabanı Kurulumu (Kök Org & SUPER_ADMIN):</strong> İlk <code>Organization</code> (Sistem Kök Organizasyonu) ve ilk <code>SUPER_ADMIN</code> hesabı veritabanına manuel SQL/Python script'i ile eklenir.</li>
+              <li><strong>SUPER_ADMIN Login:</strong> <code>POST /api/v1/auth/login</code> ile giriş yapılarak <code>access_token</code> alınır.</li>
+              <li><strong>Organizasyon (Hastane) Oluşturma:</strong> <code>SUPER_ADMIN</code> yetkisiyle <code>POST /api/v1/admin/organizations</code> çağrılarak yeni kurum oluşturulur.</li>
+              <li><strong>Kurum Yöneticisi (HOSPITAL_ADMIN) Ekleme:</strong> <code>SUPER_ADMIN</code> yetkisiyle <code>POST /api/v1/admin/users</code> çağrılır. Yanıtta bir <code>setup_token</code> döner.</li>
+              <li><strong>HOSPITAL_ADMIN Şifre Belirleme:</strong> Kurum yöneticisi <code>POST /api/v1/auth/reset-password</code> ile `setup_token` ve kendi şifresini gönderir.</li>
+              <li><strong>HOSPITAL_ADMIN Login:</strong> Kurum yöneticisi kendi e-posta ve şifresiyle giriş yapar.</li>
+              <li><strong>Kurum Personeli Ekleme:</strong> <code>HOSPITAL_ADMIN</code> kendi hastanesine Hekim (<code>PHYSICIAN</code>), Teknisyen (<code>RADIOLOGY_TECH</code>) vb. kullanıcıları ekler.</li>
+              <li><strong>İzin Override (Opsiyonel):</strong> <code>PUT /api/v1/admin/users/{user_id}/permissions</code> ile kişiye özel izin verilir veya geri alınır (<code>revoked > extra</code>).</li>
+              <li><strong>Klinik Operasyon & Oturum Yönetimi:</strong> Kullanıcılar login olur (`/auth/login`), profil okur (`/auth/me`), token yeniler (`/auth/refresh`), çıkış yapar (`/auth/logout`).</li>
+              <li><strong>Audit ve Güvenlik İzleme:</strong> Yöneticiler `GET /api/v1/admin/audit-logs` ve `/api/v1/admin/security/*` üzerinden denetim loglarını ve metrikleri takip eder.</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- SUPER_ADMIN KURULUMU -->
+        <section id="super-admin-guide" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">👑 1. SUPER_ADMIN Nasıl Oluşturuluyor?</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Manuel Veritabanı Kurulum Zorunluluğu</div>
+            <p><strong>Otomatik Bootstrap Yok:</strong> Kod tabanında otomatik CLI seed veya alembic migration bootstrap script'i bulunmamaktadır.</p>
+            <p style="margin-top: 8px;"><strong>Public Registration Engeli:</strong> Halka açık <code>/auth/register</code> endpoint'i aktif bir <code>organization_id</code> zorunlu kıldığı ve veritabanı henüz boş olduğu için kullanılamaz.</p>
+            <p style="margin-top: 8px;"><strong>Doğrudan SQL / Python REPL Adımları:</strong></p>
+            <pre><code>-- 1. Kök Organizasyon Ekle
+INSERT INTO organizations (id, name, code, org_type, is_active, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', 'System Root Org', 'SYS_ROOT', 'SYSTEM', true, NOW(), NOW());
+
+-- 2. Argon2id ile Şifrelenmiş SUPER_ADMIN Kullanıcısını Ekle
+INSERT INTO users (id, organization_id, email, password_hash, first_name, last_name, role, is_active, is_locked, failed_login_attempts, mfa_enabled, must_change_password, created_at, updated_at)
+VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'superadmin@neurooncotrack.ai', '$argon2id$v=19$m=65536,t=3,p=4$...', 'Super', 'Admin', 'SUPER_ADMIN', true, false, 0, false, false, NOW(), NOW());</code></pre>
+          </div>
+        </section>
+
+        <!-- ORGANIZATION YÖNETİMİ -->
+        <section id="organization-guide" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🏢 2. Yeni ORGANIZATION Nasıl Oluşturuluyor?</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">POST /api/v1/admin/organizations</div>
+            <p><strong>Gerekli Rol:</strong> Sadece <code>SUPER_ADMIN</code> (Diğer roller çağırırsa <code>403 Forbidden</code> alır).</p>
+            <p style="margin-top: 8px;"><strong>Request Body Örneği:</strong></p>
+            <pre><code>{
+  "name": "Acıbadem Maslak Hastanesi",
+  "code": "ACIBADEM_MASLAK",
+  "org_type": "HOSPITAL",
+  "description": "Onkoloji ve Nöroşirürji Mükemmeliyet Merkezi"
+}</code></pre>
+            <p style="margin-top: 8px;"><strong>Response Body Örneği (HTTP 201 Created):</strong></p>
+            <pre><code>{
+  "id": "a1b2c3d4-e5f6-7890-abcd-1234567890ab",
+  "name": "Acıbadem Maslak Hastanesi",
+  "code": "ACIBADEM_MASLAK",
+  "org_type": "HOSPITAL",
+  "is_active": true,
+  "description": "Onkoloji ve Nöroşirürji Mükemmeliyet Merkezi",
+  "user_count": 0,
+  "created_at": "2026-08-14T23:45:00Z"
+}</code></pre>
+          </div>
+        </section>
+
+        <!-- KULLANICI ONBOARDING & HİYERARŞİ -->
+        <section id="user-guide" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">👤 3. Yeni KULLANICI Nasıl Ekleniyor & Rol Hiyerarşisi</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">POST /api/v1/admin/users ve Setup Token Akışı</div>
+            <p><strong>Yetki Hiyerarşisi:</strong> <code>SUPER_ADMIN</code> her organizasyona her rolde kullanıcı ekleyebilir. <code>HOSPITAL_ADMIN</code> ise sadece kendi organizasyonuna ve kendisinden düşük seviyedeki rollere (Level < 80: <code>PHYSICIAN</code>, <code>RADIOLOGY_TECH</code>, vb.) kullanıcı ekleyebilir.</p>
+            <p style="margin-top: 8px;"><strong>Setup Token Şifre Belirleme Akışı:</strong> Kullanıcı oluşturulurken şifre girilmez. Yanıtta 24 saat geçerli bir <code>setup_token</code> döner. Kullanıcı <code>POST /api/v1/auth/reset-password</code> endpoint'ine bu token ve kendi yeni şifresini göndererek hesabını aktifleştirir.</p>
+          </div>
+        </section>
+
+        <!-- ÖRNEK HASTANE SENARYOSU -->
+        <section id="hospital-scenario" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🏥 8. Gerçek Bir Hastane Kurulum Senaryosu</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Adım Adım Kurum ve Kullanıcı Onboarding Simülasyonu</div>
+            <ol style="margin-left: 20px; margin-top: 10px; line-height: 1.8; color: var(--text-secondary);">
+              <li><strong>Adım 1:</strong> DB'ye <code>SUPER_ADMIN</code> manuel eklenir.</li>
+              <li><strong>Adım 2:</strong> <code>POST /auth/login</code> ile SUPER_ADMIN token alınır.</li>
+              <li><strong>Adım 3:</strong> <code>POST /admin/organizations</code> ile "Ankara Şehir Hastanesi" (Code: <code>ANKARA_SEHIR_HSP</code>) oluşturulur.</li>
+              <li><strong>Adım 4:</strong> <code>POST /admin/users</code> ile "Ankara Şehir Hastanesi" için <code>HOSPITAL_ADMIN</code> eklenir; <code>setup_token</code> elde edilir.</li>
+              <li><strong>Adım 5:</strong> HOSPITAL_ADMIN <code>POST /auth/reset-password</code> ile şifresini belirler.</li>
+              <li><strong>Adım 6:</strong> HOSPITAL_ADMIN <code>POST /auth/login</code> ile kendi token'ını alır.</li>
+              <li><strong>Adım 7:</strong> HOSPITAL_ADMIN <code>POST /admin/users</code> ile hastanesine Uzman Hekim (<code>PHYSICIAN</code>) ekler.</li>
+              <li><strong>Adım 8:</strong> Kullanıcılar kendi izole kurumlarında çalışır, adminler <code>GET /admin/audit-logs</code> ile olayları izler.</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- SWAGGER UI KULLANIMI -->
+        <section id="swagger-guide" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">🌐 9. Swagger UI Üzerinden Kullanım (http://localhost:8000/docs)</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">İnteraktif Dokümantasyon Adımları</div>
+            <p>1. <strong>http://localhost:8000/docs</strong> adresini açın.</p>
+            <p style="margin-top: 6px;">2. Sağ üstteki <strong>Authorize</strong> butonuna tıklayın.</p>
+            <p style="margin-top: 6px;">3. Value kutusuna <code>Bearer &lt;access_token&gt;</code> değerinizi yapıştırıp Authorize'a basın.</p>
+            <p style="margin-top: 6px;">4. Admin, Auth veya Sistem endpoint'lerini interaktif olarak çağırın.</p>
+          </div>
+        </section>
+
+        <!-- MANUEL VE EKSİK İŞLEMLER -->
+        <section id="missing-features" class="section-block">
+          <div class="section-header">
+            <h2 class="section-title">⚠️ 10. Sistemde Olmayan veya Manuel Yapılması Gereken İşlemler</h2>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Mevcut Implementation Durumu ve Kısıtlar</div>
+            <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8; color: var(--text-secondary);">
+              <li><strong>Otomatik CLI/Alembic Bootstrap Scripti Yoktur:</strong> İlk SUPER_ADMIN veritabanına doğrudan SQL/Python script ile eklenmelidir.</li>
+              <li><strong>Harici E-Posta Servisi (SMTP Dispatcher) Entegrasyonu Henüz Yoktur:</strong> <code>setup_token</code> ve <code>reset_token</code> e-posta atmak yerine API yanıtlarında JSON body olarak dönmektedir.</li>
+              <li><strong>Frontend Web Arayüzü Henüz Mevcut Değildir:</strong> Sistem RESTful API olarak çalışmaktadır; testler ve kullanım Swagger UI veya API istemcileri üzerinden yapılır.</li>
+              <li><strong>Production SSL/TLS Termination:</strong> HSTS header desteği mevcuttur ancak HTTPS SSL sertifika yönetimi production Nginx/Traefik reverse proxy katmanında yapılmalıdır.</li>
+            </ul>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
