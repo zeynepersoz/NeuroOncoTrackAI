@@ -1,13 +1,472 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, CheckCircle, Cpu, Database, RefreshCw, Settings, ShieldAlert } from 'lucide-react';
+import {
+  Activity,
+  CheckCircle,
+  Cpu,
+  Database,
+  KeyRound,
+  Lock,
+  Mail,
+  RefreshCw,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react';
 import heroImage from './assets/login-workstation.png';
-import { capabilities, IDLE_WARNING_MINUTES, loginMetrics, REAL_SESSION_MINUTES } from './config/neuroConstants.js';
+import {
+  capabilities,
+  IDLE_WARNING_MINUTES,
+  loginMetrics,
+  REAL_SESSION_MINUTES,
+} from './config/neuroConstants.js';
 import ThemeToggle from './components/common/ThemeToggle.jsx';
 import ProductWorkspace from './components/workspace/ProductWorkspace.jsx';
+import AdminDashboard from './components/admin/AdminDashboard.jsx';
 import { getInitialTheme } from './utils/neuroUtils.js';
-import { login, logout } from './services/authService.js';
+import {
+  changePassword,
+  forgotPassword,
+  login,
+  logout,
+  mfaVerify,
+  resetPassword,
+} from './services/authService.js';
 
 const activityEvents = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+
+// ─── MFA Doğrulama Ekranı ────────────────────────────────────────────────────
+
+function MfaScreen({ mfaState, onSuccess, onBack }) {
+  const [code, setCode] = useState('');
+  const [isBackupCode, setIsBackupCode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!code.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const session = await mfaVerify(mfaState.temporaryToken, code.trim(), isBackupCode);
+      onSuccess(session);
+    } catch (err) {
+      setError(err.message || 'MFA doğrulama başarısız.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="login-shell">
+      <section className="auth-side" aria-labelledby="mfa-title">
+        <header className="brand-row">
+          <div>
+            <strong>NeuroOncoTrack-AI</strong>
+            <span>İki faktörlü doğrulama</span>
+          </div>
+        </header>
+
+        <div className="auth-heading-row">
+          <div className="auth-copy">
+            <span className="eyebrow">Güvenli doğrulama</span>
+            <h1 id="mfa-title">Kimlik doğrulama</h1>
+          </div>
+        </div>
+
+        <form className="login-panel" onSubmit={handleSubmit}>
+          <p style={{ marginBottom: '1rem', opacity: 0.75, fontSize: '0.875rem' }}>
+            Authenticator uygulamanızdaki 6 haneli kodu girin.
+            Erişiminiz yoksa yedek kodunuzu kullanabilirsiniz.
+          </p>
+
+          <label className="field-group">
+            <span>{isBackupCode ? 'Yedek kod (8 hane)' : 'TOTP kodu (6 hane)'}</span>
+            <div className="input-shell">
+              <ShieldCheck size={18} />
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="one-time-code"
+                placeholder={isBackupCode ? 'XXXXXXXX' : '000000'}
+                maxLength={isBackupCode ? 8 : 6}
+                inputMode="numeric"
+                autoFocus
+              />
+            </div>
+          </label>
+
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={isBackupCode}
+              onChange={(e) => {
+                setIsBackupCode(e.target.checked);
+                setCode('');
+              }}
+            />
+            <span>Yedek kod kullan</span>
+          </label>
+
+          {error && (
+            <div className="form-alert error" role="alert">
+              <ShieldAlert size={18} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="action-row">
+            <button className="primary-action" type="submit" disabled={loading || !code.trim()}>
+              {loading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
+              {loading ? 'Doğrulanıyor' : 'Doğrula'}
+            </button>
+            <button className="secondary-action" type="button" onClick={onBack}>
+              <Activity size={18} />
+              Geri dön
+            </button>
+          </div>
+        </form>
+
+        <div className="compliance-strip">
+          <span><ShieldAlert size={16} /> TOTP (RFC 6238)</span>
+          <span><Database size={16} /> RS256 JWT</span>
+          <span><Settings size={16} /> Audit-ready</span>
+        </div>
+      </section>
+
+      <section className="visual-side visual-abstract" aria-hidden="true">
+        <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+        <div className="visual-scrim" aria-hidden="true" />
+      </section>
+    </main>
+  );
+}
+
+// ─── Parola Değiştirme Ekranı ─────────────────────────────────────────────────
+
+function ChangePasswordScreen({ onSuccess, onBack }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!current || !next || !confirm) {
+      setError('Tüm alanları doldurun.');
+      return;
+    }
+    if (next !== confirm) {
+      setError('Yeni parolalar eşleşmiyor.');
+      return;
+    }
+    if (next.length < 12) {
+      setError('Yeni parola en az 12 karakter olmalıdır.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await changePassword(current, next);
+      setSuccess('Parola başarıyla değiştirildi. Yeni parolanızla giriş yapabilirsiniz.');
+    } catch (err) {
+      setError(err.message || 'Parola değiştirme başarısız.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <main className="login-shell">
+        <section className="auth-side" aria-labelledby="cp-title">
+          <header className="brand-row">
+            <div>
+              <strong>NeuroOncoTrack-AI</strong>
+              <span>Parola değiştirildi</span>
+            </div>
+          </header>
+          <div className="auth-heading-row">
+            <div className="auth-copy">
+              <span className="eyebrow">Başarılı</span>
+              <h1 id="cp-title">Parola güncellendi</h1>
+            </div>
+          </div>
+          <div className="login-panel">
+            <div className="form-alert success" role="status">
+              <CheckCircle size={18} />
+              <span>{success}</span>
+            </div>
+            <div className="action-row" style={{ marginTop: '1.5rem' }}>
+              <button className="primary-action" type="button" onClick={onBack}>
+                <CheckCircle size={18} />
+                Giriş ekranına dön
+              </button>
+            </div>
+          </div>
+        </section>
+        <section className="visual-side visual-abstract" aria-hidden="true">
+          <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+          <div className="visual-scrim" aria-hidden="true" />
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="auth-side" aria-labelledby="cp-title">
+        <header className="brand-row">
+          <div>
+            <strong>NeuroOncoTrack-AI</strong>
+            <span>Parola değiştirme zorunlu</span>
+          </div>
+        </header>
+        <div className="auth-heading-row">
+          <div className="auth-copy">
+            <span className="eyebrow">Hesap güvenliği</span>
+            <h1 id="cp-title">Parola değiştir</h1>
+          </div>
+        </div>
+        <form className="login-panel" onSubmit={handleSubmit}>
+          <label className="field-group">
+            <span>Mevcut parola</span>
+            <div className="input-shell">
+              <Lock size={18} />
+              <input
+                type="password"
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+          </label>
+          <label className="field-group">
+            <span>Yeni parola (en az 12 karakter)</span>
+            <div className="input-shell">
+              <KeyRound size={18} />
+              <input
+                type="password"
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+                autoComplete="new-password"
+                placeholder="••••••••••••"
+              />
+            </div>
+          </label>
+          <label className="field-group">
+            <span>Yeni parolayı tekrar girin</span>
+            <div className="input-shell">
+              <KeyRound size={18} />
+              <input
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                placeholder="••••••••••••"
+              />
+            </div>
+          </label>
+          {error && (
+            <div className="form-alert error" role="alert">
+              <ShieldAlert size={18} />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="action-row">
+            <button className="primary-action" type="submit" disabled={loading}>
+              {loading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
+              {loading ? 'Değiştiriliyor' : 'Parolayı değiştir'}
+            </button>
+            <button className="secondary-action" type="button" onClick={onBack}>
+              <Activity size={18} />
+              Geri dön
+            </button>
+          </div>
+        </form>
+      </section>
+      <section className="visual-side visual-abstract" aria-hidden="true">
+        <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+        <div className="visual-scrim" aria-hidden="true" />
+      </section>
+    </main>
+  );
+}
+
+// ─── Parola Sıfırlama Ekranı ──────────────────────────────────────────────────
+
+function ForgotPasswordScreen({ onBack }) {
+  const [email, setEmail] = useState('');
+  const [token, setToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [step, setStep] = useState('request'); // 'request' | 'reset'
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleRequest = async (event) => {
+    event.preventDefault();
+    if (!email.trim()) { setError('E-posta adresinizi girin.'); return; }
+    setLoading(true); setError('');
+    try {
+      await forgotPassword(email.trim());
+      setSuccess('Sıfırlama bağlantısı e-posta adresinize gönderildi (mevcut hesapsa).');
+      setStep('reset');
+    } catch (err) {
+      setError(err.message || 'İstek gönderilemedi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async (event) => {
+    event.preventDefault();
+    if (!token.trim() || !newPassword) { setError('Tüm alanları doldurun.'); return; }
+    if (newPassword.length < 12) { setError('Parola en az 12 karakter olmalıdır.'); return; }
+    setLoading(true); setError('');
+    try {
+      await resetPassword(token.trim(), newPassword);
+      setSuccess('Parola başarıyla sıfırlandı. Yeni parolanızla giriş yapabilirsiniz.');
+    } catch (err) {
+      setError(err.message || 'Parola sıfırlanamadı.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="login-shell">
+      <section className="auth-side" aria-labelledby="fp-title">
+        <header className="brand-row">
+          <div>
+            <strong>NeuroOncoTrack-AI</strong>
+            <span>Parola sıfırlama</span>
+          </div>
+        </header>
+        <div className="auth-heading-row">
+          <div className="auth-copy">
+            <span className="eyebrow">{step === 'request' ? 'Hesap erişimi' : 'Yeni parola'}</span>
+            <h1 id="fp-title">{step === 'request' ? 'Parolayı sıfırla' : 'Parola yenile'}</h1>
+          </div>
+        </div>
+
+        {success && step === 'reset' && !error ? (
+          <div className="login-panel">
+            <div className="form-alert success" role="status">
+              <CheckCircle size={18} />
+              <span>{success}</span>
+            </div>
+            <div className="action-row" style={{ marginTop: '1.5rem' }}>
+              <button className="primary-action" type="button" onClick={onBack}>
+                <CheckCircle size={18} />
+                Giriş ekranına dön
+              </button>
+            </div>
+          </div>
+        ) : step === 'request' ? (
+          <form className="login-panel" onSubmit={handleRequest}>
+            <p style={{ marginBottom: '1rem', opacity: 0.75, fontSize: '0.875rem' }}>
+              Kayıtlı e-posta adresinizi girin; sıfırlama bağlantısı göndereceğiz.
+            </p>
+            {success && (
+              <div className="form-alert success" role="status">
+                <CheckCircle size={18} />
+                <span>{success}</span>
+              </div>
+            )}
+            <label className="field-group">
+              <span>E-posta adresi</span>
+              <div className="input-shell">
+                <Mail size={18} />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  placeholder="ad.soyad@kurum.org"
+                />
+              </div>
+            </label>
+            {error && (
+              <div className="form-alert error" role="alert">
+                <ShieldAlert size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+            <div className="action-row">
+              <button className="primary-action" type="submit" disabled={loading}>
+                {loading ? <RefreshCw className="spin" size={18} /> : <Mail size={18} />}
+                {loading ? 'Gönderiliyor' : 'Sıfırlama bağlantısı gönder'}
+              </button>
+              <button className="secondary-action" type="button" onClick={onBack}>
+                <Activity size={18} />
+                Geri dön
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form className="login-panel" onSubmit={handleReset}>
+            <p style={{ marginBottom: '1rem', opacity: 0.75, fontSize: '0.875rem' }}>
+              E-postanızdaki sıfırlama token'ını ve yeni parolanızı girin.
+            </p>
+            <label className="field-group">
+              <span>Sıfırlama token'ı</span>
+              <div className="input-shell">
+                <KeyRound size={18} />
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="E-postanızdaki token"
+                  autoFocus
+                />
+              </div>
+            </label>
+            <label className="field-group">
+              <span>Yeni parola (en az 12 karakter)</span>
+              <div className="input-shell">
+                <Lock size={18} />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="••••••••••••"
+                />
+              </div>
+            </label>
+            {error && (
+              <div className="form-alert error" role="alert">
+                <ShieldAlert size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+            <div className="action-row">
+              <button className="primary-action" type="submit" disabled={loading}>
+                {loading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
+                {loading ? 'Sıfırlanıyor' : 'Parolayı sıfırla'}
+              </button>
+              <button className="secondary-action" type="button" onClick={onBack}>
+                <Activity size={18} />
+                Geri dön
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+      <section className="visual-side visual-abstract" aria-hidden="true">
+        <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+        <div className="visual-scrim" aria-hidden="true" />
+      </section>
+    </main>
+  );
+}
+
+// ─── Ana Uygulama ─────────────────────────────────────────────────────────────
 
 function App() {
   const [theme, setTheme] = useState(getInitialTheme);
@@ -22,15 +481,24 @@ function App() {
   const [idleWarning, setIdleWarning] = useState(false);
   const idleTimersRef = useRef({ warning: null, logout: null });
 
+  // Ekran durumu: 'login' | 'mfa' | 'change-password' | 'forgot-password'
+  const [screen, setScreen] = useState('login');
+  const [mfaState, setMfaState] = useState(null);
+
+  // Giriş sekmesi: 'kurum' | 'bireysel'
+  const [loginTab, setLoginTab] = useState('kurum');
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem('neuro-login-theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    document.body.classList.toggle('workspace-mode', Boolean(session));
+    // Admin ekranında workspace overflow:hidden kaldırılır, scroll çalışsın
+    const isWorkspace = Boolean(session) && screen !== 'admin';
+    document.body.classList.toggle('workspace-mode', isWorkspace);
     return () => document.body.classList.remove('workspace-mode');
-  }, [session]);
+  }, [session, screen]);
 
   const can = useCallback(
     (permission) => {
@@ -40,6 +508,16 @@ function App() {
     },
     [session],
   );
+
+  // Sekme değiştirince alanları sıfırla
+  const switchLoginTab = (tab) => {
+    setLoginTab(tab);
+    setStatus(null);
+    setIsDemoMode(false);
+    setEmail('');
+    setPassword('');
+    setInstitutionCode(tab === 'kurum' ? 'NOT-2026' : '');
+  };
 
   const updateManualField = (setter, value) => {
     setter(value);
@@ -52,11 +530,12 @@ function App() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!institutionCode.trim() || !email.trim() || !password.trim()) {
-      setStatus({
-        tone: 'error',
-        message: 'Kurum kodu, e-posta ve şifre alanlarını doldurun.',
-      });
+    if (loginTab === 'kurum' && !institutionCode.trim()) {
+      setStatus({ tone: 'error', message: 'Kurum / proje kodunu girin.' });
+      return;
+    }
+    if (!email.trim() || !password.trim()) {
+      setStatus({ tone: 'error', message: 'E-posta ve şifre alanlarını doldurun.' });
       return;
     }
 
@@ -65,7 +544,7 @@ function App() {
 
     try {
       const nextSession = await login({
-        institutionCode: institutionCode.trim(),
+        institutionCode: loginTab === 'kurum' ? institutionCode.trim() : '',
         email: email.trim(),
         password,
         rememberStation,
@@ -73,18 +552,13 @@ function App() {
       });
 
       if (nextSession.mode === 'mfa') {
-        setStatus({
-          tone: 'error',
-          message: 'İki faktör doğrulama ekranı backend tarafından etkinleştirildiğinde burada açılacak.',
-        });
+        setMfaState(nextSession);
+        setScreen('mfa');
         return;
       }
 
       if (nextSession.mode === 'password-change') {
-        setStatus({
-          tone: 'error',
-          message: 'Parola değişimi zorunlu. Backend parola ekranı hazır olduğunda bu akışa yönlendirilecek.',
-        });
+        setScreen('change-password');
         return;
       }
 
@@ -100,6 +574,7 @@ function App() {
     }
   };
 
+
   const clearIdleTimers = useCallback(() => {
     if (idleTimersRef.current.warning) window.clearTimeout(idleTimersRef.current.warning);
     if (idleTimersRef.current.logout) window.clearTimeout(idleTimersRef.current.logout);
@@ -112,6 +587,7 @@ function App() {
     setSession(null);
     setStatus(null);
     setIdleWarning(false);
+    setScreen('login');
   }, [clearIdleTimers, session]);
 
   const scheduleIdleClock = useCallback(() => {
@@ -157,6 +633,8 @@ function App() {
       return;
     }
 
+    // Demo her zaman kurum sekmesinde açılır
+    setLoginTab('kurum');
     setInstitutionCode('NOT-DEMO');
     setEmail('demo@neurooncotrack.ai');
     setPassword('tekno2026');
@@ -168,7 +646,18 @@ function App() {
     });
   };
 
+  // ── Ekran yönlendirme ────────────────────────────────────────────────────
+
   if (session) {
+    if (screen === 'admin') {
+      return (
+        <AdminDashboard
+          session={session}
+          onBack={() => setScreen('workspace')}
+        />
+      );
+    }
+
     return (
       <>
         <ProductWorkspace
@@ -178,6 +667,7 @@ function App() {
           theme={theme}
           setTheme={setTheme}
           onLogout={handleLogout}
+          onOpenAdmin={session?.user?.role === 'ADMIN' ? () => setScreen('admin') : undefined}
         />
         {idleWarning ? (
           <div className="session-warning" role="status">
@@ -192,6 +682,38 @@ function App() {
     );
   }
 
+  if (screen === 'mfa') {
+    return (
+      <MfaScreen
+        mfaState={mfaState}
+        onSuccess={(sess) => {
+          setSession(sess);
+          setScreen('login');
+          setMfaState(null);
+        }}
+        onBack={() => {
+          setScreen('login');
+          setMfaState(null);
+        }}
+      />
+    );
+  }
+
+  if (screen === 'change-password') {
+    return (
+      <ChangePasswordScreen
+        onSuccess={() => setScreen('login')}
+        onBack={() => setScreen('login')}
+      />
+    );
+  }
+
+  if (screen === 'forgot-password') {
+    return <ForgotPasswordScreen onBack={() => setScreen('login')} />;
+  }
+
+  // ── Giriş ekranı ─────────────────────────────────────────────────────────
+
   return (
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="login-title">
@@ -204,26 +726,69 @@ function App() {
 
         <div className="auth-heading-row">
           <div className="auth-copy">
-          <span className="eyebrow">Yetkili erişim</span>
-          <h1 id="login-title">Klinik giriş</h1>
+            <span className="eyebrow">Yetkili erişim</span>
+            <h1 id="login-title">Klinik giriş</h1>
           </div>
           <ThemeToggle theme={theme} setTheme={setTheme} />
         </div>
 
         <form className="login-panel" onSubmit={handleSubmit}>
-          <label className="field-group">
-            <span>Kurum / proje kodu</span>
-            <div className="input-shell">
-              <Database size={18} />
-              <input
-                type="text"
-                value={institutionCode}
-                onChange={(event) => updateManualField(setInstitutionCode, event.target.value)}
-                autoComplete="organization"
-                placeholder="NOT-2026"
-              />
-            </div>
-          </label>
+
+          {/* ── Sekme Değiştirici ── */}
+          <div style={{
+            display: 'flex',
+            gap: '0.5rem',
+            marginBottom: '1.25rem',
+            background: 'var(--surface-2, rgba(255,255,255,0.06))',
+            borderRadius: '10px',
+            padding: '4px',
+          }}>
+            {[
+              { id: 'kurum', label: 'Kurum girişi' },
+              { id: 'bireysel', label: 'Bireysel giriş' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => switchLoginTab(tab.id)}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: loginTab === tab.id ? 600 : 400,
+                  background: loginTab === tab.id
+                    ? 'var(--primary, #00e5ff)'
+                    : 'transparent',
+                  color: loginTab === tab.id
+                    ? 'var(--on-primary, #000)'
+                    : 'var(--text-2, inherit)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Kurum kodu — sadece kurum girişinde görünür */}
+          {loginTab === 'kurum' && (
+            <label className="field-group">
+              <span>Kurum / proje kodu</span>
+              <div className="input-shell">
+                <Database size={18} />
+                <input
+                  type="text"
+                  value={institutionCode}
+                  onChange={(event) => updateManualField(setInstitutionCode, event.target.value)}
+                  autoComplete="organization"
+                  placeholder="NOT-2026"
+                />
+              </div>
+            </label>
+          )}
 
           <label className="field-group">
             <span>E-posta</span>
@@ -281,6 +846,18 @@ function App() {
             >
               <Activity size={18} />
               {isDemoMode ? "Demo'dan çık" : 'Demo erişimi'}
+            </button>
+          </div>
+
+          <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+            <button
+              type="button"
+              className="secondary-action"
+              style={{ fontSize: '0.8125rem', opacity: 0.75, padding: '0.25rem 0.5rem' }}
+              onClick={() => setScreen('forgot-password')}
+            >
+              <Mail size={14} />
+              Parolamı unuttum
             </button>
           </div>
         </form>

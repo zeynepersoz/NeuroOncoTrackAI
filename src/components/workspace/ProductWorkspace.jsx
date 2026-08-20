@@ -4,10 +4,12 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle,
+  ChevronDown,
   Download,
   Eye,
   FileText,
   Image as ImageIcon,
+  KeyRound,
   Layers,
   LogOut,
   Maximize2,
@@ -20,8 +22,11 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Settings,
+  Shield,
   SlidersHorizontal,
   Upload,
+  User,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -80,7 +85,225 @@ import {
 } from '../../services/reportService.js';
 import { syncReportToFhir } from '../../services/fhirService.js';
 
-export default function ProductWorkspace({ isDemoMode, session, can = () => true, theme, setTheme, onLogout }) {
+// ─── Kullanıcı Profil Dropdown Menüsü ────────────────────────────────────────
+
+function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpenAdmin }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Dışarı tıklanınca kapat
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const menuItems = [
+    ...(onOpenAdmin ? [{
+      icon: Shield,
+      label: 'Admin Paneli',
+      detail: 'Kullanıcı ve sistem yönetimi',
+      onClick: () => { setOpen(false); onOpenAdmin(); },
+      divider: false,
+      admin: true,
+    }] : []),
+    {
+      icon: User,
+      label: 'Profil bilgileri',
+      detail: currentUser.email || '',
+      onClick: () => setOpen(false),
+      divider: onOpenAdmin ? true : false,
+    },
+    {
+      icon: KeyRound,
+      label: 'Parola değiştir',
+      detail: 'Hesap güvenliği',
+      onClick: () => setOpen(false),
+      divider: false,
+    },
+    {
+      icon: Settings,
+      label: 'Oturum yönetimi',
+      detail: currentUser.role || 'PHYSICIAN',
+      onClick: () => setOpen(false),
+      divider: true,
+    },
+    {
+      icon: LogOut,
+      label: 'Çıkış yap',
+      detail: 'Oturumu sonlandır',
+      onClick: () => { setOpen(false); onLogout(); },
+      divider: false,
+      danger: true,
+    },
+  ];
+
+  return (
+    <div
+      ref={menuRef}
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+    >
+      {/* Avatar / Trigger Butonu */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          background: 'var(--chip-bg)',
+          border: '1px solid var(--chip-border)',
+          borderRadius: '10px',
+          padding: '0.35rem 0.75rem 0.35rem 0.45rem',
+          cursor: 'pointer',
+          color: 'var(--ink)',
+          transition: 'background 0.15s',
+        }}
+      >
+        {/* Baş harf avatarı */}
+        <span style={{
+          width: 30,
+          height: 30,
+          borderRadius: '50%',
+          background: 'var(--teal)',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 700,
+          fontSize: '0.875rem',
+          flexShrink: 0,
+        }}>
+          {userInitial}
+        </span>
+
+        {/* İsim + oturum tipi */}
+        <div style={{ textAlign: 'left', lineHeight: 1.3 }}>
+          <strong style={{ fontSize: '0.8125rem', display: 'block', color: 'var(--ink)' }}>
+            {currentUser.name || 'Klinik kullanıcı'}
+          </strong>
+          <small style={{ fontSize: '0.6875rem', color: 'var(--muted)' }}>
+            {sessionModeLabel}
+          </small>
+        </div>
+
+        <ChevronDown
+          size={14}
+          style={{
+            color: 'var(--muted)',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s',
+          }}
+        />
+      </button>
+
+      {/* Dropdown Menü */}
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            minWidth: 240,
+            background: 'var(--surface)',
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            boxShadow: 'var(--shadow)',
+            zIndex: 9999,
+            overflow: 'hidden',
+            color: 'var(--ink)',
+          }}
+        >
+          {/* Profil başlık */}
+          <div style={{
+            padding: '0.875rem 1rem',
+            borderBottom: '1px solid var(--line)',
+            background: 'var(--surface-muted)',
+          }}>
+            <strong style={{ fontSize: '0.875rem', display: 'block', color: 'var(--ink)' }}>
+              {currentUser.name || 'Klinik kullanıcı'}
+            </strong>
+            <small style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', marginTop: 2 }}>
+              {currentUser.email || ''}
+            </small>
+            {currentUser.organization && (
+              <small style={{ fontSize: '0.7rem', color: 'var(--faint)', display: 'block', marginTop: 2 }}>
+                {currentUser.organization}
+              </small>
+            )}
+          </div>
+
+          {/* Menü öğeleri */}
+          {menuItems.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <div key={index}>
+                {item.divider && (
+                  <div style={{
+                    height: 1,
+                    background: 'var(--line)',
+                    margin: '0.25rem 0',
+                  }} />
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={item.onClick}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.625rem 1rem',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: item.danger ? 'var(--rose)' : item.admin ? 'var(--amber)' : 'var(--ink)',
+                    textAlign: 'left',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = item.danger
+                      ? 'var(--danger-bg)'
+                      : item.admin
+                        ? 'color-mix(in srgb, var(--amber) 8%, transparent)'
+                        : 'var(--surface-muted)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <Icon size={16} style={{ flexShrink: 0, color: item.danger ? 'var(--rose)' : item.admin ? 'var(--amber)' : 'var(--muted)' }} />
+                  <div style={{ lineHeight: 1.3 }}>
+                    <span style={{ fontSize: '0.8125rem', display: 'block', fontWeight: 500, color: item.danger ? 'var(--rose)' : item.admin ? 'var(--amber)' : 'var(--ink)' }}>
+                      {item.label}
+                    </span>
+                    {item.detail && (
+                      <small style={{ fontSize: '0.6875rem', color: 'var(--faint)' }}>
+                        {item.detail}
+                      </small>
+                    )}
+                  </div>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ProductWorkspace({ isDemoMode, session, can = () => true, theme, setTheme, onLogout, onOpenAdmin }) {
+
   const [activeTab, setActiveTab] = useState('overview');
   const [tabLoading, setTabLoading] = useState(null);
   const [libraryScans, setLibraryScans] = useState([]);
@@ -1347,17 +1570,13 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
         </form>
         <div className="workspace-actions">
           <ThemeToggle theme={theme} setTheme={setTheme} />
-          <div className="user-chip">
-            <span>{userInitial}</span>
-            <div>
-              <strong>{currentUser.name || 'Klinik kullanıcı'}</strong>
-              <small>{sessionModeLabel}</small>
-            </div>
-          </div>
-          <button className="logout-action" type="button" onClick={onLogout}>
-            <LogOut size={17} />
-            Çıkış
-          </button>
+          <UserMenu
+            currentUser={currentUser}
+            userInitial={userInitial}
+            sessionModeLabel={sessionModeLabel}
+            onLogout={onLogout}
+            onOpenAdmin={onOpenAdmin}
+          />
         </div>
       </header>
 

@@ -1,8 +1,9 @@
 import { Activity, Database, Eye, FileText, FlaskConical, Settings } from 'lucide-react';
 
-export const API_BASE = 'http://127.0.0.1:8000';
+export const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 export const API_V1_BASE = `${API_BASE}/api/v1`;
-export const API_MODE = import.meta.env.VITE_API_MODE || 'legacy';
+export const AI_SERVICE_BASE = import.meta.env.VITE_AI_SERVICE_URL || 'http://127.0.0.1:8100';
+export const API_MODE = import.meta.env.VITE_API_MODE || 'contract';
 
 export const MIN_ANALYSIS_LOADER_MS = 1850;
 export const REAL_SESSION_MINUTES = 30;
@@ -61,13 +62,13 @@ export const DEFAULT_CLINICAL_PERMISSIONS = [
 
 export const DEFAULT_CLINICAL_USER = {
   id: 'clinical-demo-user',
-  name: 'Klinik kullanıcı',
-  title: 'Klinik karar destek kullanıcısı',
-  role: 'PHYSICIAN',
-  email: 'demo@neurooncotrack.ai',
+  name: 'Sistem Yöneticisi',
+  title: 'Demo Admin Kullanıcısı',
+  role: 'ADMIN',
+  email: 'admin@neurooncotrack.ai',
   institutionCode: 'NOT-2026',
   organization: 'NeuroOncoTrack Klinik Çalışma Alanı',
-  permissions: DEFAULT_CLINICAL_PERMISSIONS,
+  permissions: ['*'], // Admin tüm izinlere sahip
 };
 
 export const capabilities = [

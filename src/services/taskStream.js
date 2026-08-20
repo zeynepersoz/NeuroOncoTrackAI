@@ -79,7 +79,7 @@ function watchTaskSocket(wsUrl, onUpdate, signal) {
 }
 
 export async function watchTask({ taskId, pollUrl, wsUrl, onUpdate, signal }) {
-  const normalizedPollUrl = pollUrl || `/api/v1/ai/tasks/${taskId}`;
+  const normalizedPollUrl = pollUrl || `/ai/tasks/${taskId}`;
 
   if (wsUrl) {
     try {
