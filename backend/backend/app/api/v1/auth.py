@@ -219,15 +219,7 @@ async def login(
     )
     effective_list = sorted(list(effective_perms))
 
-    # Create RS256 JWT Access Token
-    access_token, jti, exp = security.create_access_token(
-        subject=str(user.id),
-        organization_id=str(user.organization_id),
-        role=user.role,
-        permissions=effective_list,
-    )
-
-    # Create Opaque Refresh Token & Session
+    # Create Opaque Refresh Token & Session first to attach session ID (sid) to access token
     now = datetime.now(timezone.utc)
     refresh_token = security.generate_refresh_token()
     refresh_hash = security.hash_token(refresh_token)
@@ -235,7 +227,9 @@ async def login(
     ip_addr = request.client.host if request.client else None
     user_agent = request.headers.get("User-Agent")
 
+    sess_id = uuid.uuid4()
     sess = Session(
+        id=sess_id,
         user_id=user.id,
         refresh_token_hash=refresh_hash,
         ip_address=ip_addr,
@@ -245,6 +239,15 @@ async def login(
         expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     db.add(sess)
+
+    # Create RS256 JWT Access Token with Session ID (sid)
+    access_token, jti, exp = security.create_access_token(
+        subject=str(user.id),
+        organization_id=str(user.organization_id),
+        role=user.role,
+        permissions=effective_list,
+        extra_claims={"sid": str(sess_id)},
+    )
 
     user.last_login_at = now
     await db.commit()
@@ -273,12 +276,26 @@ async def refresh(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    redis: redis_core.Redis | None = Depends(get_redis_client),
 ) -> TokenRefreshResponse:
     """
     Refresh access token using HTTP-only refresh token cookie.
 
     Rotates refresh token and returns new RS256 JWT access token.
+    Enforces row-level lock (with_for_update) and IP rate limiting.
     """
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+
+    # Enforce refresh rate limit
+    if redis is not None:
+        is_allowed, attempts = await redis_core.check_rate_limit(
+            redis, ip_addr, prefix="rl:refresh:", max_attempts=10
+        )
+        if not is_allowed:
+            raise RateLimitError(
+                detail=f"Çok fazla yenileme denemesi. Lütfen {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
+            )
+
     refresh_token = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
     if not refresh_token:
         # Check header if passed in request body/header
@@ -287,26 +304,38 @@ async def refresh(
             refresh_token = auth_header
 
     if not refresh_token:
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:refresh:")
         raise InvalidTokenError(detail="Yenileme jetonu bulunamadı.")
 
     try:
         computed_hash = security.hash_token(refresh_token)
     except ValueError:
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:refresh:")
         raise InvalidTokenError(detail="Geçersiz yenileme jetonu.")
 
-    sess_res = await db.execute(select(Session).where(Session.refresh_token_hash == computed_hash))
+    # Execute row-level lock (with_for_update) to prevent race conditions during rotation
+    sess_res = await db.execute(
+        select(Session)
+        .where(Session.refresh_token_hash == computed_hash)
+        .with_for_update()
+    )
     sess = sess_res.scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
 
-    if not sess:
-        raise InvalidTokenError(detail="Geçersiz veya bulunamayan oturum.")
+    if sess:
+        sess_exp = sess.expires_at
+        if sess_exp and sess_exp.tzinfo is None:
+            sess_exp = sess_exp.replace(tzinfo=timezone.utc)
+    else:
+        sess_exp = None
 
-    if not sess.is_valid or sess.revoked_at is not None:
-        raise InvalidTokenError(detail="Oturum sonlandırılmış.")
-
-    if sess.expires_at < now:
-        raise InvalidTokenError(detail="Oturum süresi dolmuş.")
+    if not sess or not sess.is_valid or sess.revoked_at is not None or (sess_exp and sess_exp < now):
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:refresh:")
+        raise InvalidTokenError(detail="Geçersiz, bulunamayan veya süresi dolmuş oturum.")
 
     # Fetch User
     user_res = await db.execute(select(User).where(User.id == sess.user_id))
@@ -317,14 +346,16 @@ async def refresh(
 
     # Refresh Token Rotation — Revoke old session and issue new one
     sess.revoked_at = now
+    sess.revocation_reason = "ROTATED"
 
     new_refresh_token = security.generate_refresh_token()
     new_refresh_hash = security.hash_token(new_refresh_token)
 
-    ip_addr = request.client.host if request.client else None
     user_agent = request.headers.get("User-Agent")
 
+    new_sess_id = uuid.uuid4()
     new_sess = Session(
+        id=new_sess_id,
         user_id=user.id,
         refresh_token_hash=new_refresh_hash,
         ip_address=ip_addr,
@@ -335,7 +366,7 @@ async def refresh(
     )
     db.add(new_sess)
 
-    # Issue new Access Token
+    # Issue new Access Token with new Session ID (sid)
     effective_perms = perms_core.get_effective_permissions(
         user.role, user.extra_permissions, user.revoked_permissions
     )
@@ -344,6 +375,7 @@ async def refresh(
         organization_id=str(user.organization_id),
         role=user.role,
         permissions=sorted(list(effective_perms)),
+        extra_claims={"sid": str(new_sess_id)},
     )
 
     await db.commit()
@@ -399,8 +431,30 @@ async def logout(
             sess = sess_res.scalar_one_or_none()
             if sess and sess.revoked_at is None:
                 sess.revoked_at = now
+                sess.revocation_reason = "LOGOUT"
                 await db.commit()
         except ValueError:
+            pass
+
+    # Revoke Session from Access Token sid if present
+    if credentials and credentials.credentials:
+        try:
+            payload = security.decode_access_token(credentials.credentials)
+            sid = payload.get("sid")
+            if sid:
+                sid_uuid = uuid.UUID(str(sid))
+                sid_res = await db.execute(
+                    select(Session).where(
+                        Session.id == sid_uuid,
+                        Session.user_id == current_user.id,
+                    )
+                )
+                sid_sess = sid_res.scalar_one_or_none()
+                if sid_sess and sid_sess.revoked_at is None:
+                    sid_sess.revoked_at = now
+                    sid_sess.revocation_reason = "LOGOUT"
+                    await db.commit()
+        except Exception:
             pass
 
     # Blacklist current access token JTI in Redis
@@ -654,23 +708,39 @@ async def forgot_password(
     request: Request,
     payload: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
+    redis: redis_core.Redis | None = Depends(get_redis_client),
 ) -> MessageResponse:
     """
     Request password reset link.
 
     Flow:
-    1. Normalize input email (strip and lowercase).
-    2. Lookup user by normalized email.
-    3. User Enumeration Defense: Always return identical generic message regardless of user existence.
-    4. If user exists:
+    1. Enforce IP rate limit.
+    2. Normalize input email (strip and lowercase).
+    3. Lookup user by normalized email.
+    4. User Enumeration Defense: Always return identical generic message regardless of user existence.
+    5. If user exists:
        - Generate secure random token (256-bit entropy).
        - Hash token with SHA-256.
        - Invalidate previous unused reset tokens for user.
        - Store PasswordResetToken with 15-minute expiration.
        - Send email via email_service abstraction.
        - Log audit event PAROLA_SIFIRLAMA_TALEBI without sensitive token.
-    5. Return generic MessageResponse.
+    6. Return generic MessageResponse.
     """
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+
+    if redis is not None:
+        is_allowed, attempts = await redis_core.check_rate_limit(
+            redis, ip_addr, prefix="rl:forgot_password:", max_attempts=5
+        )
+        if not is_allowed:
+            raise RateLimitError(
+                detail=f"Çok fazla parola sıfırlama talebi. Lütfen {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
+            )
+        await redis_core.increment_rate_limit(
+            redis, ip_addr, prefix="rl:forgot_password:"
+        )
+
     generic_response = MessageResponse(
         message="Parola sıfırlama bağlantısı gönderildiyse kayıtlı e-posta adresinize gönderilmiştir."
     )
@@ -729,6 +799,7 @@ async def reset_password(
     request: Request,
     payload: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
+    redis: redis_core.Redis | None = Depends(get_redis_client),
 ) -> MessageResponse:
     """
     Reset password using reset token received via email.
@@ -753,6 +824,16 @@ async def reset_password(
     12. Return MessageResponse.
     """
     now = datetime.now(timezone.utc)
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+
+    if redis is not None:
+        is_allowed, attempts = await redis_core.check_rate_limit(
+            redis, ip_addr, prefix="rl:reset_password:", max_attempts=5
+        )
+        if not is_allowed:
+            raise RateLimitError(
+                detail=f"Çok fazla parola sıfırlama denemesi. Lütfen {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
+            )
 
     # 1. Hash input token
     token_hash = security.hash_token(payload.token)
@@ -764,9 +845,13 @@ async def reset_password(
 
     # 3. Validate token
     if not token_record:
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:reset_password:")
         raise InvalidTokenError(detail="Sıfırlama bağlantısı geçersiz.")
 
     if token_record.used_at is not None:
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:reset_password:")
         raise InvalidTokenError(detail="Sıfırlama bağlantısı zaten kullanılmış.")
 
     # Handle timezone normalization for expires_at comparison
@@ -775,6 +860,8 @@ async def reset_password(
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
     if expires_at <= now:
+        if redis is not None:
+            await redis_core.increment_rate_limit(redis, ip_addr, prefix="rl:reset_password:")
         raise InvalidTokenError(detail="Sıfırlama bağlantısının süresi dolmuş.")
 
     # 4. Lookup user
@@ -1028,9 +1115,26 @@ async def mfa_verify(
     """
     Verify MFA login challenge with temporary token and TOTP or backup code.
     """
+    app_obj = getattr(request, "app", None)
+    app_state = getattr(app_obj, "state", None) if app_obj else None
+    redis_client = getattr(app_state, "redis", None) if app_state else None
+    ip_addr = request.client.host if request.client else "127.0.0.1"
+
+    # Enforce MFA verify IP rate limit
+    if redis_client is not None:
+        is_allowed, attempts = await redis_core.check_rate_limit(
+            redis_client, ip_addr, prefix="rl:mfa_verify:", max_attempts=5
+        )
+        if not is_allowed:
+            raise RateLimitError(
+                detail=f"Çok fazla MFA doğrulama denemesi. Lütfen {settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES} dakika sonra tekrar deneyin."
+            )
+
     try:
         temp_payload = security.decode_mfa_temp_token(payload.mfa_temp_token)
     except Exception as e:
+        if redis_client is not None:
+            await redis_core.increment_rate_limit(redis_client, ip_addr, prefix="rl:mfa_verify:")
         raise MFARequiredError(detail="Geçersiz veya süresi dolmuş geçici doğrulama jetonu.") from e
 
     user_id_str = temp_payload.get("sub")
@@ -1038,11 +1142,9 @@ async def mfa_verify(
     try:
         user_uuid = uuid.UUID(user_id_str)
     except (ValueError, TypeError):
+        if redis_client is not None:
+            await redis_core.increment_rate_limit(redis_client, ip_addr, prefix="rl:mfa_verify:")
         raise MFARequiredError(detail="Geçersiz geçici doğrulama jetonu.")
-
-    app_obj = getattr(request, "app", None)
-    app_state = getattr(app_obj, "state", None) if app_obj else None
-    redis_client = getattr(app_state, "redis", None) if app_state else None
 
     # Verify temp token hasn't been used yet (one-time semantics)
     if redis_client and temp_jti:

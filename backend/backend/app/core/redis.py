@@ -74,36 +74,46 @@ async def is_token_blacklisted(redis: Redis, jti: str) -> bool:
 RATE_LIMIT_PREFIX = "rl:login:"
 
 
-async def check_rate_limit(redis: Redis, ip_address: str) -> tuple[bool, int]:
+async def check_rate_limit(
+    redis: Redis,
+    identifier: str,
+    prefix: str = RATE_LIMIT_PREFIX,
+    max_attempts: int = settings.LOGIN_RATE_LIMIT_ATTEMPTS,
+) -> tuple[bool, int]:
     """
-    Check login rate limit for an IP address.
+    Check rate limit counter for an identifier and prefix.
 
     Returns:
         tuple of (is_allowed, current_count)
     """
     try:
-        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        key = f"{prefix}{identifier}"
         count = await redis.get(key)
 
         if count is None:
             return True, 0
 
         current = int(count)
-        return current < settings.LOGIN_RATE_LIMIT_ATTEMPTS, current
+        return current < max_attempts, current
     except Exception:
         # Fail open gracefully if Redis is unreachable
         return True, 0
 
 
-async def increment_rate_limit(redis: Redis, ip_address: str) -> int:
+async def increment_rate_limit(
+    redis: Redis,
+    identifier: str,
+    prefix: str = RATE_LIMIT_PREFIX,
+    window_minutes: int = settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES,
+) -> int:
     """
-    Increment the login attempt counter for an IP.
+    Increment the rate limit attempt counter for an identifier.
 
     Sets a TTL window on first attempt.
     Returns the new count.
     """
     try:
-        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        key = f"{prefix}{identifier}"
         pipe = redis.pipeline()
         pipe.incr(key)
         pipe.ttl(key)
@@ -114,17 +124,21 @@ async def increment_rate_limit(redis: Redis, ip_address: str) -> int:
 
         # Set TTL only on first increment (when TTL is -1, meaning no expiry set)
         if ttl == -1:
-            await redis.expire(key, settings.LOGIN_RATE_LIMIT_WINDOW_MINUTES * 60)
+            await redis.expire(key, window_minutes * 60)
 
         return new_count
     except Exception:
         return 0
 
 
-async def reset_rate_limit(redis: Redis, ip_address: str) -> None:
-    """Reset the login rate limit counter for an IP after successful login."""
+async def reset_rate_limit(
+    redis: Redis,
+    identifier: str,
+    prefix: str = RATE_LIMIT_PREFIX,
+) -> None:
+    """Reset the rate limit counter for an identifier after successful action."""
     try:
-        key = f"{RATE_LIMIT_PREFIX}{ip_address}"
+        key = f"{prefix}{identifier}"
         await redis.delete(key)
     except Exception:
         pass

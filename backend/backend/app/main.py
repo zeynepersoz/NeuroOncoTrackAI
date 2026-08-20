@@ -65,6 +65,41 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
+# ── Production Security Headers Middleware ───────────────────
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Inject production-grade security headers into HTTP responses with path-scoped CSP for docs."""
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Path-scoped CSP: Allow CDN assets & inline init script exclusively for /docs and /redoc
+    path = request.url.path
+    if path.startswith(("/docs", "/redoc", "/openapi.json")):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+            "frame-ancestors 'none';"
+        )
+    else:
+        response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
+
+    # Enforce HSTS only on HTTPS or production forwarded HTTPS requests to avoid breaking local dev
+    is_https = (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto") == "https"
+        or (not settings.is_development and request.url.scheme != "http")
+    )
+    if is_https:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    return response
+
+
 # ── Exception Handlers ───────────────────────────────────────
 register_exception_handlers(app)
 
@@ -163,6 +198,8 @@ async def liveness_check() -> dict[str, str]:
 
 # ── Router Registration ─────────────────────────────────────
 from app.api.v1.auth import router as auth_router
+from app.api.v1.admin import router as admin_router
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
 

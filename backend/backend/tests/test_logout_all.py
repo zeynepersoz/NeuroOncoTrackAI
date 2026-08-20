@@ -409,8 +409,9 @@ async def test_logout_vs_logout_all_distinction_regression(db_session, async_cli
     ref2_res = await async_client.post("/api/v1/auth/refresh")
     assert ref2_res.status_code == 200
 
-    # 2. Call /logout-all with token2
-    logout_all_res = await async_client.post("/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {token2}"})
+    # 2. Call /logout-all with rotated token from refresh
+    token2_new = ref2_res.json()["access_token"]
+    logout_all_res = await async_client.post("/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {token2_new}"})
     assert logout_all_res.status_code == 204
 
     # Verify ALL sessions for user_a are now revoked

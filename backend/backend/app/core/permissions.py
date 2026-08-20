@@ -260,16 +260,45 @@ ROLE_PERMISSIONS: dict[Role, set[Permission]] = {
     },
 }
 
+# Central registry for system-level administrative permissions
+SYSTEM_ADMIN_PERMISSIONS: set[Permission] = {
+    Permission.USER_CREATE,
+    Permission.USER_DELETE,
+    Permission.USER_LOCK,
+    Permission.ROLE_ASSIGN,
+    Permission.SYSTEM_CONFIG,
+}
+
+# Canonical Role Hierarchy Ranking
+ROLE_HIERARCHY_LEVELS: dict[Role, int] = {
+    Role.SUPER_ADMIN: 100,
+    Role.HOSPITAL_ADMIN: 80,
+    Role.PHYSICIAN: 50,
+    Role.RADIOLOGY_TECH: 50,
+    Role.RESEARCHER: 50,
+    Role.AUDITOR: 50,
+    Role.SERVICE: 50,
+}
+
+
+def normalize_permission(permission: Permission | str) -> str:
+    """Normalize Permission enum or string literal to standard value string."""
+    if isinstance(permission, Permission):
+        return permission.value
+    return str(permission).strip()
+
 
 def get_effective_permissions(
     role: Role | str,
-    extra_permissions: list[str] | None = None,
-    revoked_permissions: list[str] | None = None,
+    extra_permissions: list[Permission | str] | None = None,
+    revoked_permissions: list[Permission | str] | None = None,
 ) -> set[str]:
     """
     Calculate effective permissions for a user.
 
     effective = (role_base_permissions + extra) - revoked
+    Conflict resolution: revoked_permissions ALWAYS takes precedence over extra_permissions.
+    Supports string normalization and list deduplication.
     """
     try:
         r_enum = Role(role) if isinstance(role, str) else role
@@ -279,23 +308,36 @@ def get_effective_permissions(
     base = {p.value for p in ROLE_PERMISSIONS.get(r_enum, set())} if r_enum else set()
 
     if extra_permissions:
-        base.update(extra_permissions)
+        extra_set = {normalize_permission(p) for p in extra_permissions if p}
+        base.update(extra_set)
 
     if revoked_permissions:
-        base -= set(revoked_permissions)
+        revoked_set = {normalize_permission(p) for p in revoked_permissions if p}
+        base -= revoked_set
 
     return base
 
 
 def has_permission(
-    role: Role | str,
+    user_or_role: Any,
     permission: Permission | str,
-    extra_permissions: list[str] | None = None,
-    revoked_permissions: list[str] | None = None,
+    extra_permissions: list[Permission | str] | None = None,
+    revoked_permissions: list[Permission | str] | None = None,
 ) -> bool:
-    """Check if a given role configuration grants a specific permission."""
-    perm_str = permission.value if isinstance(permission, Permission) else str(permission)
-    effective = get_effective_permissions(role, extra_permissions, revoked_permissions)
+    """Check if a User object or role configuration grants a specific permission."""
+    from app.models.user import User
+
+    if isinstance(user_or_role, User):
+        role = user_or_role.role
+        extra = extra_permissions if extra_permissions is not None else user_or_role.extra_permissions
+        revoked = revoked_permissions if revoked_permissions is not None else user_or_role.revoked_permissions
+    else:
+        role = user_or_role
+        extra = extra_permissions
+        revoked = revoked_permissions
+
+    perm_str = normalize_permission(permission)
+    effective = get_effective_permissions(role, extra, revoked)
     return perm_str in effective
 
 
@@ -311,11 +353,56 @@ def is_hospital_admin(role: Role | str) -> bool:
     return r_val == Role.HOSPITAL_ADMIN.value
 
 
+def can_assign_role(
+    actor_role: Role | str | None,
+    target_role: Role | str | None,
+    current_target_role: Role | str | None = None,
+) -> bool:
+    """
+    Evaluates role hierarchy for role assignment and modification operations.
+
+    Rules:
+    - Fail-closed: Returns False if actor_role or target_role is None or invalid.
+    - SUPER_ADMIN can assign any role.
+    - Non-SUPER_ADMIN actor can only assign/modify roles strictly lower in rank (actor_level > target_level).
+    - If current_target_role is provided, actor cannot modify a user with equal or higher rank (actor_level > current_target_level).
+    - Level 50 functional roles (PHYSICIAN, RADIOLOGY_TECH, etc.) cannot assign any role.
+    """
+    if actor_role is None or target_role is None:
+        return False
+
+    try:
+        a_enum = Role(actor_role) if isinstance(actor_role, str) else actor_role
+        t_enum = Role(target_role) if isinstance(target_role, str) else target_role
+    except ValueError:
+        return False
+
+    if a_enum == Role.SUPER_ADMIN:
+        return True
+
+    actor_level = ROLE_HIERARCHY_LEVELS.get(a_enum, 0)
+    target_level = ROLE_HIERARCHY_LEVELS.get(t_enum, 0)
+
+    if actor_level <= target_level:
+        return False
+
+    if current_target_role is not None:
+        try:
+            curr_enum = Role(current_target_role) if isinstance(current_target_role, str) else current_target_role
+            curr_level = ROLE_HIERARCHY_LEVELS.get(curr_enum, 0)
+            if actor_level <= curr_level:
+                return False
+        except ValueError:
+            return False
+
+    return True
+
+
 # ── ABAC (Attribute-Based Access Control) Helpers ────────────
 
 def verify_organization_access(
-    user_org_id: str | uuid.UUID,
-    resource_org_id: str | uuid.UUID,
+    user_org_id: str | uuid.UUID | None,
+    resource_org_id: str | uuid.UUID | None,
     is_super: bool = False,
 ) -> bool:
     """
@@ -323,15 +410,18 @@ def verify_organization_access(
 
     Users can only access resources belonging to their organization,
     unless they have SUPER_ADMIN status (is_super=True).
+    Fail-closed: Returns False if user_org_id or resource_org_id is None.
     """
     if is_super:
         return True
+    if user_org_id is None or resource_org_id is None:
+        return False
     return str(user_org_id) == str(resource_org_id)
 
 
 def verify_resource_ownership(
-    user_id: str | uuid.UUID,
-    resource_owner_id: str | uuid.UUID,
+    user_id: str | uuid.UUID | None,
+    resource_owner_id: str | uuid.UUID | None,
     is_admin_override: bool = False,
 ) -> bool:
     """
@@ -339,15 +429,18 @@ def verify_resource_ownership(
 
     Users can access resources they own (user_id == resource_owner_id),
     or if authorized via admin override.
+    Fail-closed: Returns False if user_id or resource_owner_id is None.
     """
     if is_admin_override:
         return True
+    if user_id is None or resource_owner_id is None:
+        return False
     return str(user_id) == str(resource_owner_id)
 
 
 def check_abac_access(
-    user_id: str | uuid.UUID,
-    user_org_id: str | uuid.UUID,
+    user_id: str | uuid.UUID | None,
+    user_org_id: str | uuid.UUID | None,
     user_role: Role | str,
     resource_org_id: str | uuid.UUID | None = None,
     resource_owner_id: str | uuid.UUID | None = None,
@@ -356,14 +449,18 @@ def check_abac_access(
     Combined ABAC Access Evaluator.
 
     Evaluates both organization boundary matching and resource ownership.
-    - SUPER_ADMIN bypasses all restrictions.
+    - SUPER_ADMIN bypasses organization and ownership boundary restrictions.
     - HOSPITAL_ADMIN can access all resources within their organization.
     - Standard roles must match organization AND (if owner is specified) match resource ownership.
+    - Fail-closed: If user_id or user_org_id is None (and not SUPER_ADMIN), returns False.
     """
     role_str = user_role.value if isinstance(user_role, Role) else str(user_role)
 
     if role_str == Role.SUPER_ADMIN.value:
         return True
+
+    if user_id is None or user_org_id is None:
+        return False
 
     # Check Organization Access if specified
     if resource_org_id is not None:

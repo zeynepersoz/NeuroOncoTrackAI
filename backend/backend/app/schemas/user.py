@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserProfileResponse(BaseModel):
@@ -29,7 +29,7 @@ class UserProfileResponse(BaseModel):
     last_login_at: datetime | None = None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserProfileUpdate(BaseModel):
@@ -40,4 +40,4 @@ class UserProfileUpdate(BaseModel):
     title: str | None = Field(None, max_length=100)
     email: EmailStr | None = Field(None)
 
-    model_config = {"from_attributes": True, "extra": "ignore"}
+    model_config = ConfigDict(from_attributes=True, extra="forbid")

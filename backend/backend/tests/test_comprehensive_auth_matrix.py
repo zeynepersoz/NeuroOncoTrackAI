@@ -250,11 +250,19 @@ async def test_domain_8_profile_update_matrix(db_session, async_client, matrix_u
     assert res_invalid.status_code == 422
     assert res_invalid.json()["error"]["code"] == "VAL_001"
 
-    # Valid update updates name and ignores forbidden fields like role
-    res_valid = await async_client.patch(
+    # Extra unwhitelisted field (e.g. role) returns 422 Unprocessable Entity under strict DTO validation
+    res_forbidden = await async_client.patch(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
         json={"first_name": "UpdatedMatrixName", "role": "ADMIN"},
+    )
+    assert res_forbidden.status_code == 422
+
+    # Valid profile update updates first_name
+    res_valid = await async_client.patch(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"first_name": "UpdatedMatrixName"},
     )
     assert res_valid.status_code == 200
     assert res_valid.json()["first_name"] == "UpdatedMatrixName"

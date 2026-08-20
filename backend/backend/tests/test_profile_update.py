@@ -235,7 +235,7 @@ async def test_profile_update_invalid_token(async_client):
 
 @pytest.mark.anyio
 async def test_cannot_update_role(db_session, async_client, user_main):
-    """Attempting to update 'role' through /auth/me is ignored and does not alter role."""
+    """Attempting to update 'role' through /auth/me returns 422 Unprocessable Entity under strict DTO validation."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -248,9 +248,7 @@ async def test_cannot_update_role(db_session, async_client, user_main):
         json={"role": "SUPER_ADMIN", "first_name": "Hakki"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
-    assert res.json()["role"] == "PHYSICIAN"
-    assert res.json()["first_name"] == "Hakki"
+    assert res.status_code == 422
 
     await db_session.refresh(user_main)
     assert user_main.role == "PHYSICIAN"
@@ -258,7 +256,7 @@ async def test_cannot_update_role(db_session, async_client, user_main):
 
 @pytest.mark.anyio
 async def test_cannot_update_permissions(db_session, async_client, user_main):
-    """Attempting to update 'extra_permissions' or 'permissions' is ignored."""
+    """Attempting to update 'extra_permissions' or 'permissions' returns 422 Unprocessable Entity."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -271,13 +269,12 @@ async def test_cannot_update_permissions(db_session, async_client, user_main):
         json={"permissions": ["system:all"], "extra_permissions": ["system:all"]},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
-    assert "system:all" not in res.json()["permissions"]
+    assert res.status_code == 422
 
 
 @pytest.mark.anyio
 async def test_cannot_update_organization(db_session, async_client, user_main):
-    """Attempting to update 'organization_id' is ignored and org remains unchanged."""
+    """Attempting to update 'organization_id' returns 422 Unprocessable Entity and org remains unchanged."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -290,13 +287,12 @@ async def test_cannot_update_organization(db_session, async_client, user_main):
         json={"organization_id": "00000000-0000-0000-0000-000000000000"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
-    assert res.json()["organization_id"] == str(user_main.organization_id)
+    assert res.status_code == 422
 
 
 @pytest.mark.anyio
 async def test_cannot_update_account_status(db_session, async_client, user_main):
-    """Attempting to update 'is_active' is ignored."""
+    """Attempting to update 'is_active' returns 422 Unprocessable Entity."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -309,7 +305,7 @@ async def test_cannot_update_account_status(db_session, async_client, user_main)
         json={"is_active": False},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
+    assert res.status_code == 422
 
     await db_session.refresh(user_main)
     assert user_main.is_active is True
@@ -317,7 +313,7 @@ async def test_cannot_update_account_status(db_session, async_client, user_main)
 
 @pytest.mark.anyio
 async def test_cannot_update_mfa_fields(db_session, async_client, user_main):
-    """Attempting to update 'mfa_enabled' or 'mfa_secret' is ignored."""
+    """Attempting to update 'mfa_enabled' or 'mfa_secret' returns 422 Unprocessable Entity."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -330,7 +326,7 @@ async def test_cannot_update_mfa_fields(db_session, async_client, user_main):
         json={"mfa_enabled": True, "mfa_secret": "fake_secret"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
+    assert res.status_code == 422
 
     await db_session.refresh(user_main)
     assert user_main.mfa_enabled is False
@@ -338,7 +334,7 @@ async def test_cannot_update_mfa_fields(db_session, async_client, user_main):
 
 @pytest.mark.anyio
 async def test_cannot_update_system_fields(db_session, async_client, user_main):
-    """Attempting to update 'id' is ignored."""
+    """Attempting to update 'id' returns 422 Unprocessable Entity."""
     token, _, _ = security.create_access_token(
         subject=str(user_main.id),
         organization_id=str(user_main.organization_id),
@@ -351,8 +347,7 @@ async def test_cannot_update_system_fields(db_session, async_client, user_main):
         json={"id": "00000000-0000-0000-0000-000000000000"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert res.status_code == 200
-    assert res.json()["id"] == str(user_main.id)
+    assert res.status_code == 422
 
 
 # ── TEST 14: EMAIL UNIQUENESS CONFLICT ────────────────────────
@@ -434,17 +429,13 @@ async def test_profile_update_cannot_target_another_user(db_session, async_clien
         permissions=[],
     )
 
-    # Attempt to send user_other.id in payload
+    # Attempt to send user_other.id in payload returns 422 Unprocessable Entity
     res = await async_client.patch(
         "/api/v1/auth/me",
         json={"user_id": str(user_other.id), "id": str(user_other.id), "first_name": "HackedName"},
         headers={"Authorization": f"Bearer {token_main}"},
     )
-    assert res.status_code == 200
-
-    # User main is updated
-    await db_session.refresh(user_main)
-    assert user_main.first_name == "HackedName"
+    assert res.status_code == 422
 
     # User other remains untouched
     await db_session.refresh(user_other)
