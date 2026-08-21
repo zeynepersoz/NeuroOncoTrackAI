@@ -1,7 +1,9 @@
 from llm.report_validator import (
     check_disclaimer,
     check_forbidden_phrases,
+    check_non_turkish_characters,
     check_numeric_consistency,
+    check_restricted_mode_violation,
     check_sections,
     check_wrong_terminology,
     extract_sections,
@@ -93,6 +95,34 @@ def test_check_numeric_consistency_mismatch():
     assert "tumor_volume" in issues[0]
 
 
+def test_check_numeric_consistency_reads_nested_radiomics():
+    report = "Hacim 42.7 cm³, ET/WT oranı %63 olarak hesaplanmıştır."
+    model_output = {
+        "decision": "classified",
+        "confidence": 0.94,
+        "radiomics": {"volume_cm3": 42.7, "et_wt_ratio": 0.63},
+    }
+    issues = check_numeric_consistency(report, model_output)
+    assert issues == []
+
+
+def test_check_numeric_consistency_excludes_confidence():
+    report = "Hacim 42.7 cm³ olarak hesaplanmıştır."
+    model_output = {
+        "confidence": 0.94,
+        "radiomics": {"volume_cm3": 42.7},
+    }
+    issues = check_numeric_consistency(report, model_output)
+    assert issues == []
+
+
+def test_check_numeric_consistency_detects_radiomics_mismatch():
+    report = "Hacim 99.9 cm³ olarak hesaplanmıştır."
+    model_output = {"radiomics": {"volume_cm3": 42.7}}
+    issues = check_numeric_consistency(report, model_output)
+    assert len(issues) == 1
+    assert "radiomics.volume_cm3" in issues[0]
+
 def test_extract_sections_all():
     sections = extract_sections(GOOD_REPORT)
     assert "BULGULAR" in sections
@@ -160,3 +190,101 @@ def test_validate_report_invalid_terminology():
     result = validate_report(bad)
     assert result["is_valid"] is False
     assert "evre 4" in result["wrong_terminology"]
+
+def test_check_non_turkish_characters_clean_turkish():
+    report = "Tümör hacmi ölçüldü, çok büyük değil. Değerlendirme yapıldı."
+    found = check_non_turkish_characters(report)
+    assert found == []
+
+
+def test_check_non_turkish_characters_detects_cjk():
+    report = "Bu bir 详细 rapordur."
+    found = check_non_turkish_characters(report)
+    assert len(found) > 0
+
+
+def test_check_non_turkish_characters_detects_vietnamese():
+    report = "Bu cụ thể bir değerlendirmedir."
+    found = check_non_turkish_characters(report)
+    assert "ụ" in found
+
+
+def test_check_non_turkish_characters_allows_all_turkish_letters():
+    report = "çÇğĞıİöÖşŞüÜ ile yazılmış tam bir cümle örneğidir, sağlıklıdır."
+    found = check_non_turkish_characters(report)
+    assert found == []
+
+
+def test_check_non_turkish_characters_allows_medical_units():
+    report = "Hacim 42.7 cm³ olarak %85 oranında ölçüldü (± 2°)."
+    found = check_non_turkish_characters(report)
+    assert found == []
+
+
+def test_validate_report_flags_non_turkish_characters():
+    bad = f"BULGULAR\n详细 test.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest.\n{REQUIRED_DISCLAIMER}"
+    result = validate_report(bad)
+    assert result["is_valid"] is False
+    assert len(result["non_turkish_characters"]) > 0
+
+
+def test_validate_report_valid_includes_empty_non_turkish_list():
+    result = validate_report(GOOD_REPORT, {"tumor_volume": 45.2})
+    assert result["non_turkish_characters"] == []
+
+def test_check_restricted_mode_no_violation_when_label_present():
+    report = "BULGULAR\nGlioma tespit edilmiştir.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest."
+    model_output = {"decision": "classified", "label": "glioma"}
+
+    violations = check_restricted_mode_violation(report, model_output)
+
+    assert violations == []
+
+
+def test_check_restricted_mode_no_violation_when_no_model_output():
+    report = "BULGULAR\nGlioma olabilir.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest."
+    violations = check_restricted_mode_violation(report, None)
+    assert violations == []
+
+
+def test_check_restricted_mode_detects_tumor_type_leak():
+    report = "BULGULAR\nBulgular gliom ile uyumludur.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest."
+    model_output = {"decision": "uncertain", "label": None}
+
+    violations = check_restricted_mode_violation(report, model_output)
+
+    assert "gliom" in violations
+
+
+def test_check_restricted_mode_clean_when_label_null_and_no_leak():
+    report = "BULGULAR\nHacim 40 cm³ olarak ölçülmüştür.\nDEĞERLENDİRME\nEk inceleme önerilir.\nÖNERİ\nTest."
+    model_output = {"decision": "uncertain", "label": None}
+
+    violations = check_restricted_mode_violation(report, model_output)
+
+    assert violations == []
+
+
+def test_check_restricted_mode_detects_multiple_keywords():
+    report = "BULGULAR\nGliom veya menenjiom olabilir.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest."
+    model_output = {"decision": "uncertain", "label": None}
+
+    violations = check_restricted_mode_violation(report, model_output)
+
+    assert "gliom" in violations
+    assert "menenjiom" in violations
+
+
+def test_validate_report_flags_restricted_mode_violation():
+    bad = f"BULGULAR\nGliom şüphesi.\nDEĞERLENDİRME\nTest.\nÖNERİ\nTest.\n{REQUIRED_DISCLAIMER}"
+    model_output = {"decision": "uncertain", "label": None}
+
+    result = validate_report(bad, model_output)
+
+    assert result["is_valid"] is False
+    assert "gliom" in result["restricted_mode_violations"]
+
+
+def test_validate_report_valid_includes_empty_restricted_violations():
+    result = validate_report(GOOD_REPORT, {"tumor_volume": 45.2})
+    assert result["restricted_mode_violations"] == []

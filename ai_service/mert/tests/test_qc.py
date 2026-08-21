@@ -1,9 +1,10 @@
+import pytest
 from pathlib import Path
 
 import SimpleITK as sitk
 
 from preprocessing import qc
-from preprocessing.utils import Patient
+from preprocessing.utils import Patient, PreprocessingError
 
 
 def _write_dummy(path: Path, size=(10, 10, 10), spacing=(1.0, 1.0, 1.0), all_zero=False):
@@ -80,3 +81,52 @@ def test_quarantine_if_critical_skips_complete_patient(tmp_path):
 
     assert quarantined is False
     assert not (tmp_path / "quarantine" / "p6").exists()
+
+def test_patient_default_source_is_brats(tmp_path):
+    p = Patient(
+        patient_id="p7",
+        modalities={"t1": tmp_path / "t1.nii.gz"},
+        output_dir=tmp_path / "out",
+    )
+    assert p.source == "brats"
+
+
+def test_patient_accepts_valid_source(tmp_path):
+    p = Patient(
+        patient_id="p8",
+        modalities={"t1": tmp_path / "t1.nii.gz"},
+        output_dir=tmp_path / "out",
+        source="upenn_gbm",
+    )
+    assert p.source == "upenn_gbm"
+
+
+def test_patient_rejects_invalid_source(tmp_path):
+    with pytest.raises(PreprocessingError):
+        Patient(
+            patient_id="p9",
+            modalities={"t1": tmp_path / "t1.nii.gz"},
+            output_dir=tmp_path / "out",
+            source="yanlis_kaynak",
+        )
+
+
+def test_patient_training_eligible_sources(tmp_path):
+    for source in ("brats", "upenn_gbm", "tcga_gbm", "tcga_lgg", "ucsf_pdgm", "brats_africa"):
+        p = Patient(
+            patient_id=f"p_{source}",
+            modalities={"t1": tmp_path / "t1.nii.gz"},
+            output_dir=tmp_path / "out" / source,
+            source=source,
+        )
+        assert p.is_training_eligible() is True
+
+
+def test_patient_hospital_external_not_training_eligible(tmp_path):
+    p = Patient(
+        patient_id="p10",
+        modalities={"t1": tmp_path / "t1.nii.gz"},
+        output_dir=tmp_path / "out",
+        source="hospital_external",
+    )
+    assert p.is_training_eligible() is False

@@ -34,16 +34,25 @@ def build_vector_store(chunks: list[str], embedder: Embedder) -> VectorStore:
 
 def build_query_from_output(model_output: dict) -> str:
     parts = []
-    if "idh_status" in model_output:
-        parts.append(f"IDH {model_output['idh_status']}")
-    if "mgmt_status" in model_output:
-        parts.append(f"MGMT {model_output['mgmt_status']}")
-    if "who_grade" in model_output:
-        parts.append(f"WHO Grade {model_output['who_grade']}")
-    if "tumor_volume" in model_output:
+
+    label = model_output.get("label")
+    if label is not None:
+        parts.append(f"tümör tipi {label}")
+    else:
+        parts.append("belirsiz sınıflandırma düşük güven")
+
+    radiomics = model_output.get("radiomics", {})
+    if "volume_cm3" in radiomics:
         parts.append("tümör hacmi segmentasyon")
+    if "et_wt_ratio" in radiomics:
+        parts.append("ET WT oranı kontrast tutan bölge")
+
+    if model_output.get("reject_reason"):
+        parts.append(f"belirsizlik nedeni {model_output['reject_reason']}")
+
     if not parts:
         parts.append("beyin tümörü değerlendirme")
+
     return ", ".join(parts)
 
 

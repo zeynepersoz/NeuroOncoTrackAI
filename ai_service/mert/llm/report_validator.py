@@ -7,6 +7,7 @@ from .system_prompt import (
     FORBIDDEN_PHRASES,
     REPORT_SECTIONS,
     REQUIRED_DISCLAIMER,
+    RESTRICTED_MODE_KEYWORDS,
     WRONG_TERMINOLOGY,
 )
 
@@ -42,14 +43,59 @@ def check_wrong_terminology(report: str) -> list[str]:
     return found
 
 
+NUMERIC_CONSISTENCY_EXCLUDED_KEYS = ("confidence",)
+
+
 def check_numeric_consistency(report: str, model_output: dict) -> list[str]:
     mismatches = []
+    numeric_fields = {}
+
+    radiomics = model_output.get("radiomics")
+    if isinstance(radiomics, dict):
+        for key, value in radiomics.items():
+            if isinstance(value, (int, float)):
+                numeric_fields[f"radiomics.{key}"] = value
+
     for key, value in model_output.items():
+        if key == "radiomics" or key in NUMERIC_CONSISTENCY_EXCLUDED_KEYS:
+            continue
         if isinstance(value, (int, float)):
-            str_value = str(value)
-            if str_value not in report:
-                mismatches.append(f"{key}: {value}")
+            numeric_fields[key] = value
+
+    for key, value in numeric_fields.items():
+        candidates = {str(value)}
+        if isinstance(value, float):
+            candidates.add(f"{value:.1f}")
+            candidates.add(f"{value:.0f}")
+            if 0 <= value <= 1:
+                candidates.add(str(round(value * 100)))
+
+        if not any(c in report for c in candidates):
+            mismatches.append(f"{key}: {value}")
+
     return mismatches
+
+
+def check_non_turkish_characters(report: str) -> list[str]:
+    allowed = (
+        r"A-Za-zÇçĞğİIıöÖşŞüÜ0-9"
+        r"\s"
+        r".,;:!?()\-–—/%°³²±"
+        r"\"'“”‘’…"
+        r"\n"
+    )
+    pattern = re.compile(f"[^{allowed}]")
+    matches = pattern.findall(report)
+    return list(set(matches))
+
+
+def check_restricted_mode_violation(report: str, model_output: dict | None) -> list[str]:
+    if not model_output or model_output.get("label") is not None:
+        return []
+
+    report_lower = report.lower()
+    violations = [kw for kw in RESTRICTED_MODE_KEYWORDS if kw in report_lower]
+    return violations
 
 
 def extract_sections(report: str) -> dict[str, str]:
@@ -102,12 +148,16 @@ def validate_report(report: str, model_output: dict | None = None) -> dict:
     forbidden = check_forbidden_phrases(report)
     wrong_terms = check_wrong_terminology(report)
     numeric_issues = check_numeric_consistency(report, model_output) if model_output else []
+    non_turkish_chars = check_non_turkish_characters(report)
+    restricted_violations = check_restricted_mode_violation(report, model_output)
 
     is_valid = (
         len(missing_sections) == 0
         and len(forbidden) == 0
         and len(wrong_terms) == 0
         and len(numeric_issues) == 0
+        and len(non_turkish_chars) == 0
+        and len(restricted_violations) == 0
     )
 
     sections = extract_sections(report)
@@ -121,6 +171,8 @@ def validate_report(report: str, model_output: dict | None = None) -> dict:
         "forbidden_phrases": forbidden,
         "wrong_terminology": wrong_terms,
         "numeric_mismatches": numeric_issues,
+        "non_turkish_characters": non_turkish_chars,
+        "restricted_mode_violations": restricted_violations,
         "sections": sections,
         "fhir": fhir,
     }

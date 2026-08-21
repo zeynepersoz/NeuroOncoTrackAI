@@ -45,29 +45,40 @@ def test_load_guidelines_empty_dir(tmp_path):
     assert chunks == []
 
 
-def test_build_query_all_fields():
+def test_build_query_classified_with_radiomics():
     q = build_query_from_output({
-        "idh_status": "mutant",
-        "mgmt_status": "metile",
-        "who_grade": "IV",
-        "tumor_volume": 45.2,
+        "decision": "classified",
+        "label": "glioma",
+        "confidence": 0.94,
+        "radiomics": {"volume_cm3": 45.2, "et_wt_ratio": 0.6},
     })
 
-    assert "IDH mutant" in q
-    assert "MGMT metile" in q
-    assert "WHO Grade IV" in q
+    assert "tümör tipi glioma" in q
     assert "tümör hacmi" in q
+    assert "ET WT oranı" in q
 
 
 def test_build_query_partial_fields():
-    q = build_query_from_output({"tumor_volume": 30.0})
+    q = build_query_from_output({"radiomics": {"volume_cm3": 30.0}})
     assert "tümör hacmi" in q
-    assert "IDH" not in q
+    assert "tümör tipi" not in q
+
+
+def test_build_query_uncertain_label_null():
+    q = build_query_from_output({
+        "decision": "uncertain",
+        "label": None,
+        "reject_reason": "confidence_below_threshold",
+    })
+
+    assert "belirsiz sınıflandırma düşük güven" in q
+    assert "tümör tipi" not in q
+    assert "confidence_below_threshold" in q
 
 
 def test_build_query_empty_output():
     q = build_query_from_output({})
-    assert q == "beyin tümörü değerlendirme"
+    assert q == "belirsiz sınıflandırma düşük güven"
 
 
 def test_build_vector_store_correct_count():
