@@ -16,6 +16,7 @@ VALID_SOURCES = (
     "tcga_lgg",
     "ucsf_pdgm",
     "brats_africa",
+    "ucsd_ptgbm",
     "hospital_external",
 )
 
@@ -25,6 +26,7 @@ TRAINING_SOURCES = (
     "tcga_gbm",
     "tcga_lgg",
     "ucsf_pdgm",
+    "ucsd_ptgbm",
     "brats_africa",
 )
 

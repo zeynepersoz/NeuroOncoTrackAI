@@ -35,3 +35,8 @@ ai_service/finetuned_models_kaggle/*.npz
 
 # Kaggle raw dataset (repo dışı, mutlak path'ten okunur)
 ai_service/data/kaggle/
+
+processed/
+quarantine/
+**/processed/
+**/quarantine/
