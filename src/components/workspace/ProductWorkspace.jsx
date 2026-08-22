@@ -84,10 +84,11 @@ import {
   updateWorkflowStatus,
 } from '../../services/reportService.js';
 import { syncReportToFhir } from '../../services/fhirService.js';
+import { ProfileModal, ChangePasswordModal, SessionsModal } from '../user/UserModals.jsx';
 
 // ─── Kullanıcı Profil Dropdown Menüsü ────────────────────────────────────────
 
-function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpenAdmin }) {
+function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpenAdmin, onOpenProfile, onOpenPassword, onOpenSessions }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -116,21 +117,21 @@ function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpen
       icon: User,
       label: 'Profil bilgileri',
       detail: currentUser.email || '',
-      onClick: () => setOpen(false),
+      onClick: () => { setOpen(false); if (onOpenProfile) onOpenProfile(); },
       divider: onOpenAdmin ? true : false,
     },
     {
       icon: KeyRound,
       label: 'Parola değiştir',
       detail: 'Hesap güvenliği',
-      onClick: () => setOpen(false),
+      onClick: () => { setOpen(false); if (onOpenPassword) onOpenPassword(); },
       divider: false,
     },
     {
       icon: Settings,
       label: 'Oturum yönetimi',
       detail: currentUser.role || 'PHYSICIAN',
-      onClick: () => setOpen(false),
+      onClick: () => { setOpen(false); if (onOpenSessions) onOpenSessions(); },
       divider: true,
     },
     {
@@ -316,6 +317,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [taskStatus, setTaskStatus] = useState(null);
   const [integrationNote, setIntegrationNote] = useState(session?.warning || '');
   const [errorMessage, setErrorMessage] = useState('');
+  const [activeUserModal, setActiveUserModal] = useState(null); // null | 'profile' | 'password' | 'sessions'
   const [patientName, setPatientName] = useState('Hasta Protokol-9824');
   const [patientAge, setPatientAge] = useState(42);
   const [patientGender, setPatientGender] = useState('female');
@@ -1576,6 +1578,9 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             sessionModeLabel={sessionModeLabel}
             onLogout={onLogout}
             onOpenAdmin={onOpenAdmin}
+            onOpenProfile={() => setActiveUserModal('profile')}
+            onOpenPassword={() => setActiveUserModal('password')}
+            onOpenSessions={() => setActiveUserModal('sessions')}
           />
         </div>
       </header>
@@ -1722,6 +1727,23 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           {renderMainTab()}
         </section>
       </div>
+
+      {activeUserModal === 'profile' && (
+        <ProfileModal
+          session={session}
+          onClose={() => setActiveUserModal(null)}
+        />
+      )}
+      {activeUserModal === 'password' && (
+        <ChangePasswordModal
+          onClose={() => setActiveUserModal(null)}
+        />
+      )}
+      {activeUserModal === 'sessions' && (
+        <SessionsModal
+          onClose={() => setActiveUserModal(null)}
+        />
+      )}
     </main>
   );
 }

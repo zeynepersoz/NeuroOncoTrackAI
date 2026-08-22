@@ -17,8 +17,9 @@
 
 import { apiClient, isEndpointUnavailable } from './apiClient.js';
 
-// Backend admin endpoint'leri hazır değilse true bırak
-const MOCK_MODE = true;
+// Backend admin endpoint'leri hazır değilse true yap (manual override)
+// false olduğunda: önce gerçek API dener, 404/501/network hatası alırsa mock'a düşer
+const MOCK_MODE = false;
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
 
@@ -77,13 +78,18 @@ const MOCK_AUDIT_LOG = [
 // ─── Yardımcı ──────────────────────────────────────────────────────────────
 
 async function callAdmin(path, options = {}) {
-  if (MOCK_MODE) return null; // mock moda düşecek
+  if (MOCK_MODE) return null; // Manuel mock modunda direkt mock'a düş
   try {
     if (options.method === 'DELETE') return await apiClient.delete(path);
     if (options.method === 'PATCH') return await apiClient.patch(path, options.body);
     return await apiClient.get(path);
   } catch (error) {
-    if (isEndpointUnavailable(error)) return null;
+    // 404/405/501 = endpoint henüz yok → mock'a düş
+    // TypeError / status 0 = backend erişilemez → mock'a düş
+    const isUnavailable = isEndpointUnavailable(error) ||
+      error instanceof TypeError ||
+      (error?.status === 0);
+    if (isUnavailable) return null;
     throw error;
   }
 }

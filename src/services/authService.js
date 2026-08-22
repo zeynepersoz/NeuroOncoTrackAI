@@ -60,16 +60,24 @@ function normalizeSession(payload, fallback) {
   const user = payload?.user || payload?.profile || payload?.me || {};
   const token =
     payload?.access_token || payload?.accessToken || payload?.token || null;
-  const expiresIn = Number(
-    payload?.expires_in || payload?.expiresIn || REAL_SESSION_MINUTES * 60,
-  );
+
+  // Backend expires_at (ISO datetime) veya expires_in (saniye) döndürebilir
+  let expiresAt;
+  if (payload?.expires_at) {
+    expiresAt = new Date(payload.expires_at).getTime();
+  } else {
+    const expiresIn = Number(
+      payload?.expires_in || payload?.expiresIn || REAL_SESSION_MINUTES * 60,
+    );
+    expiresAt = Date.now() + expiresIn * 1000;
+  }
 
   if (token) setAccessToken(token);
 
   return {
     mode: 'api',
     accessToken: token,
-    expiresAt: Date.now() + expiresIn * 1000,
+    expiresAt,
     user: {
       ...DEFAULT_CLINICAL_USER,
       ...user,
@@ -92,6 +100,24 @@ function normalizeSession(payload, fallback) {
       mustChangePassword: user.must_change_password ?? false,
       lastLoginAt: user.last_login_at || null,
     },
+  };
+}
+
+// ─── Yardımcı: Backend Session Yanıtını Frontend Formatına Normalize Et ───────
+
+function normalizeSessionItem(s) {
+  return {
+    id: s.id,
+    // Backend: ip / ip_address → her ikisini de destekle
+    ip_address: s.ip || s.ip_address || null,
+    // Backend: device (parsed string) veya user_agent (raw UA string)
+    user_agent: s.user_agent || s.device || null,
+    device_fingerprint: s.device_fingerprint || null,
+    created_at: s.created_at,
+    last_used_at: s.last_used_at,
+    expires_at: s.expires_at,
+    // Backend: current / is_current → her ikisini de destekle
+    is_current: s.current ?? s.is_current ?? false,
   };
 }
 
@@ -120,14 +146,11 @@ export async function login({
   }
 
   try {
+    // Backend LoginRequest: sadece email + password kabul ediyor
+    // institution_code ve remember_station backend şemasında YOK
     const payload = await apiClient.post(
       '/auth/login',
-      {
-        institution_code: institutionCode,
-        email,
-        password,
-        remember_station: rememberStation,
-      },
+      { email, password },
       { auth: false },
     );
 
@@ -291,7 +314,10 @@ export async function resetPassword(token, newPassword) {
 
 /** Aktif oturumları listele — GET /api/v1/auth/sessions */
 export async function listSessions() {
-  return apiClient.get('/auth/sessions');
+  const data = await apiClient.get('/auth/sessions');
+  // Backend array veya { sessions: [...] } formatında dönebilir
+  const raw = Array.isArray(data) ? data : (data?.sessions || data?.items || []);
+  return raw.map(normalizeSessionItem);
 }
 
 /**
