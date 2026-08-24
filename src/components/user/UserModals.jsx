@@ -18,6 +18,7 @@ import {
   LogOut,
   Monitor,
   Save,
+  Settings,
   Shield,
   ShieldCheck,
   Smartphone,
@@ -832,6 +833,565 @@ function SessionCard({ session, isCurrent, onRevoke, revoking }) {
           {revoking === session.id ? <Loader2 size={14} className="spin" /> : <LogOut size={14} />}
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── 4. Birleşik Hesap & Kullanıcı Ayarları Modalı ─────────────────────────────
+
+export function SettingsModal({ session, onClose, onProfileUpdate, initialTab = 'profile' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  const tabs = [
+    { id: 'profile', label: 'Profil Bilgileri', icon: User },
+    { id: 'password', label: 'Parola Değiştir', icon: KeyRound },
+    { id: 'sessions', label: 'Aktif Oturumlar', icon: Globe },
+  ];
+
+  return (
+    <ModalBackdrop onClose={onClose}>
+      <ModalHeader
+        icon={Settings}
+        title="Hesap Ayarları"
+        subtitle={session?.user?.email || 'Profil, güvenlik ve oturum tercihleri'}
+        onClose={onClose}
+      />
+
+      {/* Sekme Çubuğu */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--line)',
+        background: 'var(--surface-muted)',
+        padding: '0 1rem',
+        gap: '0.25rem',
+      }}>
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.625rem 0.875rem',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: isActive ? '2px solid var(--teal)' : '2px solid transparent',
+                color: isActive ? 'var(--teal)' : 'var(--muted)',
+                fontWeight: isActive ? 600 : 400,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                marginBottom: -1,
+                transition: 'all 0.15s',
+              }}
+            >
+              <Icon size={15} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Seçili Sekme Görünümü */}
+      <div>
+        {activeTab === 'profile' && (
+          <ProfileTabContent session={session} onClose={onClose} onProfileUpdate={onProfileUpdate} />
+        )}
+        {activeTab === 'password' && (
+          <PasswordTabContent onClose={onClose} />
+        )}
+        {activeTab === 'sessions' && (
+          <SessionsTabContent onClose={onClose} />
+        )}
+      </div>
+    </ModalBackdrop>
+  );
+}
+
+// ─── Sekme İçerikleri (SettingsModal için) ────────────────────────────────────
+
+function ProfileTabContent({ session, onClose, onProfileUpdate }) {
+  const [form, setForm] = useState({
+    first_name: '',
+    last_name: '',
+    title: '',
+    email: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getMe()
+      .then((data) => {
+        setProfile(data);
+        setForm({
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          title: data.title || '',
+          email: data.email || '',
+        });
+      })
+      .catch(() => {
+        const u = session?.user || {};
+        const nameParts = (u.name || '').split(' ');
+        setForm({
+          first_name: nameParts[0] || '',
+          last_name: nameParts.slice(1).join(' ') || '',
+          title: u.title || '',
+          email: u.email || '',
+        });
+        setProfile(u);
+      })
+      .finally(() => setLoading(false));
+  }, [session]);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleSave = async () => {
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      showToast('Ad ve soyad zorunludur.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateMe({
+        firstName: form.first_name.trim(),
+        lastName: form.last_name.trim(),
+        title: form.title.trim() || null,
+        email: form.email.trim() !== (profile?.email || '') ? form.email.trim() : undefined,
+      });
+      showToast('Profil başarıyla güncellendi.');
+      if (onProfileUpdate) onProfileUpdate(updated);
+    } catch (err) {
+      showToast(err?.detail || err?.message || 'Güncelleme başarısız oldu.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const u = profile || session?.user || {};
+  const ROLE_LABELS = {
+    ADMIN: 'Yönetici', PHYSICIAN: 'Hekim', RADIOLOGIST: 'Radyolog',
+    RESEARCHER: 'Araştırmacı', VIEWER: 'Gözlemci',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--muted)' }}>
+        <Loader2 size={24} className="spin" />
+        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>Profil yükleniyor...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ padding: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+          <span style={{
+            width: 52, height: 52, borderRadius: '50%',
+            background: 'var(--teal)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: '1.25rem', flexShrink: 0,
+          }}>
+            {(form.first_name || u.email || '?')[0].toUpperCase()}
+          </span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--ink)' }}>
+              {form.title ? `${form.title} ` : ''}{form.first_name} {form.last_name}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 2 }}>
+              {ROLE_LABELS[u.role] || u.role || '—'} · {u.organization || u.organization_name || '—'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <FormField label="Ad" required>
+            <input
+              style={inputStyle}
+              value={form.first_name}
+              onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+              placeholder="Adınız"
+            />
+          </FormField>
+          <FormField label="Soyad" required>
+            <input
+              style={inputStyle}
+              value={form.last_name}
+              onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+              placeholder="Soyadınız"
+            />
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <FormField label="Unvan">
+            <input
+              style={inputStyle}
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Dr., Prof. Dr., Uz. Dr. ..."
+            />
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <FormField label="E-posta" required>
+            <input
+              type="email"
+              style={inputStyle}
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              placeholder="ornek@kurum.edu.tr"
+            />
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <FormField label="Rol">
+            <input style={readonlyStyle} readOnly value={ROLE_LABELS[u.role] || u.role || '—'} />
+          </FormField>
+          <FormField label="MFA Durumu">
+            <div style={{
+              ...inputStyle,
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              cursor: 'default', opacity: 1,
+              color: u.mfa_enabled || u.mfaEnabled ? 'var(--teal)' : 'var(--muted)',
+            }}>
+              {(u.mfa_enabled || u.mfaEnabled)
+                ? <><ShieldCheck size={14} /> Aktif</>
+                : <><Shield size={14} /> Pasif</>
+              }
+            </div>
+          </FormField>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <FormField label="Kurum">
+            <input style={readonlyStyle} readOnly value={u.organization || u.organization_name || '—'} />
+          </FormField>
+        </div>
+
+        {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </div>
+
+      <div style={{
+        padding: '1rem 1.5rem',
+        borderTop: '1px solid var(--line)',
+        display: 'flex', gap: '0.75rem', justifyContent: 'flex-end',
+      }}>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            padding: '0.5rem 1.25rem',
+            background: 'var(--surface-muted)',
+            border: '1px solid var(--line)',
+            borderRadius: 8, cursor: 'pointer',
+            color: 'var(--muted)', fontSize: '0.875rem',
+          }}
+        >
+          Kapat
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.5rem 1.25rem',
+            background: 'var(--teal)', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500,
+            opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {saving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+          {saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PasswordTabContent({ onClose }) {
+  const [form, setForm] = useState({ current: '', newPass: '', confirm: '' });
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [done, setDone] = useState(false);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleSave = async () => {
+    if (!form.current) { showToast('Mevcut parolayı girin.', 'error'); return; }
+    if (form.newPass.length < 12) { showToast('Yeni parola en az 12 karakter olmalıdır.', 'error'); return; }
+    if (form.newPass !== form.confirm) { showToast('Yeni parola ve tekrarı eşleşmiyor.', 'error'); return; }
+    if (form.current === form.newPass) { showToast('Yeni parola mevcut parolayla aynı olamaz.', 'error'); return; }
+
+    setSaving(true);
+    try {
+      await changePassword(form.current, form.newPass);
+      setDone(true);
+    } catch (err) {
+      const msg = err?.detail || err?.message || 'Parola değiştirilemedi.';
+      showToast(msg, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pwdInput = (value, onChange, show, onToggle, placeholder) => (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={show ? 'text' : 'password'}
+        style={{ ...inputStyle, paddingRight: '2.5rem' }}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--muted)', padding: 2,
+        }}
+      >
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+
+  if (done) {
+    return (
+      <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+        <ShieldCheck size={48} style={{ color: 'var(--teal)', marginBottom: '1rem' }} />
+        <div style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--ink)', marginBottom: '0.5rem' }}>
+          Parola başarıyla değiştirildi
+        </div>
+        <div style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: '2rem' }}>
+          Güvenliğiniz için diğer tüm oturumlarınız sonlandırıldı.
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            padding: '0.625rem 2rem',
+            background: 'var(--teal)', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500,
+          }}
+        >
+          Tamam
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <FormField label="Mevcut Parola" required>
+          {pwdInput(form.current, (v) => setForm(f => ({ ...f, current: v })), showCurrent, () => setShowCurrent(s => !s), '••••••••••••')}
+        </FormField>
+
+        <div style={{ height: 1, background: 'var(--line)' }} />
+
+        <FormField label="Yeni Parola" required>
+          {pwdInput(form.newPass, (v) => setForm(f => ({ ...f, newPass: v })), showNew, () => setShowNew(s => !s), 'En az 12 karakter')}
+          <PasswordStrength password={form.newPass} />
+        </FormField>
+
+        <FormField label="Yeni Parola Tekrar" required>
+          <input
+            type="password"
+            style={{
+              ...inputStyle,
+              borderColor: form.confirm && form.confirm !== form.newPass ? 'var(--rose)' : undefined,
+            }}
+            value={form.confirm}
+            onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
+            placeholder="Yeni parolayı tekrar girin"
+          />
+          {form.confirm && form.confirm !== form.newPass && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--rose)' }}>Parolalar eşleşmiyor</span>
+          )}
+        </FormField>
+
+        {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </div>
+
+      <div style={{
+        padding: '1rem 1.5rem',
+        borderTop: '1px solid var(--line)',
+        display: 'flex', gap: '0.75rem', justifyContent: 'flex-end',
+      }}>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            padding: '0.5rem 1.25rem',
+            background: 'var(--surface-muted)',
+            border: '1px solid var(--line)',
+            borderRadius: 8, cursor: 'pointer',
+            color: 'var(--muted)', fontSize: '0.875rem',
+          }}
+        >
+          İptal
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.5rem 1.25rem',
+            background: 'var(--teal)', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500,
+            opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {saving ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />}
+          {saving ? 'Değiştiriliyor...' : 'Parolayı Güncelle'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SessionsTabContent({ onClose }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [revoking, setRevoking] = useState('');
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await listSessions();
+      setSessions(Array.isArray(data) ? data : []);
+    } catch {
+      setSessions([]);
+      showToast('Oturumlar yüklenemedi — backend bağlantısı yok.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRevoke = async (sessionId) => {
+    setRevoking(sessionId);
+    try {
+      await revokeSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      showToast('Oturum sonlandırıldı.');
+    } catch (err) {
+      showToast(err?.detail || 'Oturum sonlandırılamadı.', 'error');
+    } finally {
+      setRevoking('');
+    }
+  };
+
+  const currentSession = sessions.find(s => s.is_current);
+  const otherSessions = sessions.filter(s => !s.is_current);
+
+  return (
+    <div>
+      <div style={{ padding: '1.25rem 1.5rem' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '2.5rem 2rem', color: 'var(--muted)' }}>
+            <Loader2 size={24} className="spin" />
+            <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>Oturumlar yükleniyor...</div>
+          </div>
+        ) : sessions.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2.5rem 2rem', color: 'var(--muted)' }}>
+            Aktif oturum bulunamadı.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {currentSession && (
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Bu Cihaz
+                </div>
+                <SessionCard session={currentSession} isCurrent onRevoke={handleRevoke} revoking={revoking} />
+              </div>
+            )}
+
+            {otherSessions.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Diğer Oturumlar ({otherSessions.length})
+                </div>
+                {otherSessions.map(s => (
+                  <SessionCard key={s.id} session={s} isCurrent={false} onRevoke={handleRevoke} revoking={revoking} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </div>
+
+      <div style={{
+        padding: '1rem 1.5rem',
+        borderTop: '1px solid var(--line)',
+        display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          style={{
+            padding: '0.5rem 1rem',
+            background: 'var(--surface-muted)',
+            border: '1px solid var(--line)',
+            borderRadius: 8, cursor: 'pointer',
+            color: 'var(--muted)', fontSize: '0.8125rem',
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+          }}
+        >
+          {loading ? <Loader2 size={13} className="spin" /> : null}
+          Yenile
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            padding: '0.5rem 1.25rem',
+            background: 'var(--teal)', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500,
+          }}
+        >
+          Kapat
+        </button>
+      </div>
     </div>
   );
 }

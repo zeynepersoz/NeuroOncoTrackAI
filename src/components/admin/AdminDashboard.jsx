@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Settings,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -42,6 +43,7 @@ import {
   patchAdminUser,
   revokeAdminSession,
 } from '../../services/adminService.js';
+import { changePassword, getMe, updateMe } from '../../services/authService.js';
 
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
 
@@ -1250,6 +1252,311 @@ function AuditLogTab() {
   );
 }
 
+// ─── Admin Kendi Hesap Ayarları Sekmesi ────────────────────────────────────────
+
+function AdminSelfSettingsTab({ session }) {
+  const [form, setForm] = useState({
+    first_name: '',
+    last_name: '',
+    title: '',
+    email: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [profile, setProfile] = useState(null);
+
+  // Parola Değiştirme State'i
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordToast, setPasswordToast] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getMe()
+      .then((data) => {
+        setProfile(data);
+        setForm({
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          title: data.title || '',
+          email: data.email || '',
+        });
+      })
+      .catch(() => {
+        const u = session?.user || {};
+        const parts = (u.name || '').split(' ');
+        setForm({
+          first_name: parts[0] || '',
+          last_name: parts.slice(1).join(' ') || '',
+          title: u.title || '',
+          email: u.email || '',
+        });
+        setProfile(u);
+      })
+      .finally(() => setLoading(false));
+  }, [session]);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const showPasswordToast = (msg, type = 'success') => {
+    setPasswordToast({ msg, type });
+    setTimeout(() => setPasswordToast(null), 3500);
+  };
+
+  const handleProfileSave = async (e) => {
+    e.preventDefault();
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      showToast('Ad ve soyad zorunludur.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateMe({
+        firstName: form.first_name.trim(),
+        lastName: form.last_name.trim(),
+        title: form.title.trim() || null,
+        email: form.email.trim() !== (profile?.email || '') ? form.email.trim() : undefined,
+      });
+      showToast('Profil bilgileri başarıyla güncellendi.');
+    } catch (err) {
+      showToast(err?.detail || err?.message || 'Profil güncellenemedi.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      showPasswordToast('Mevcut parolayı girin.', 'error');
+      return;
+    }
+    if (newPassword.length < 12) {
+      showPasswordToast('Yeni parola en az 12 karakter olmalıdır.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showPasswordToast('Yeni parola ve tekrarı eşleşmiyor.', 'error');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      showPasswordToast('Parola başarıyla değiştirildi.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      showPasswordToast(err?.detail || err?.message || 'Parola değiştirilemedi.', 'error');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%',
+    boxSizing: 'border-box',
+    background: 'var(--surface-muted)',
+    border: '1px solid var(--line)',
+    borderRadius: 8,
+    padding: '0.5rem 0.75rem',
+    color: 'var(--ink)',
+    fontSize: '0.875rem',
+    outline: 'none',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+        <RefreshCw size={24} className="spin" />
+        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>Profil bilgileri yükleniyor...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
+      {/* Profil Formu */}
+      <form onSubmit={handleProfileSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--ink)', margin: '0 0 0.25rem 0' }}>
+            Profil Bilgilerim
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>
+            Yönetici hesabınıza ait temel iletişim ve unvan bilgileri
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+              Ad *
+            </label>
+            <input
+              required
+              style={inputStyle}
+              value={form.first_name}
+              onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+              Soyad *
+            </label>
+            <input
+              required
+              style={inputStyle}
+              value={form.last_name}
+              onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+            Unvan
+          </label>
+          <input
+            style={inputStyle}
+            value={form.title}
+            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            placeholder="Dr., Prof. Dr., Uz. Dr. ..."
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+            E-posta *
+          </label>
+          <input
+            required
+            type="email"
+            style={inputStyle}
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+          />
+        </div>
+
+        {toast && (
+          <div style={{
+            padding: '0.625rem 0.875rem',
+            borderRadius: 8,
+            background: toast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)',
+            border: `1px solid ${toast.type === 'error' ? 'var(--rose)' : 'var(--teal)'}`,
+            color: toast.type === 'error' ? 'var(--rose)' : 'var(--teal)',
+            fontSize: '0.8125rem',
+          }}>
+            {toast.msg}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+            padding: '0.55rem 1.25rem',
+            background: 'var(--teal)', color: '#fff',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500, width: 'fit-content',
+          }}
+        >
+          {saving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+          {saving ? 'Kaydediliyor...' : 'Profili Kaydet'}
+        </button>
+      </form>
+
+      {/* Parola Değiştirme Formu */}
+      <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', borderLeft: '1px solid var(--line)', paddingLeft: '2rem' }}>
+        <div>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--ink)', margin: '0 0 0.25rem 0' }}>
+            Parola Değiştir
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>
+            Yönetici hesabınızın güvenliği için güçlü bir parola seçin
+          </p>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+            Mevcut Parola *
+          </label>
+          <input
+            required
+            type="password"
+            style={inputStyle}
+            value={currentPassword}
+            onChange={e => setCurrentPassword(e.target.value)}
+            placeholder="••••••••••••"
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+            Yeni Parola *
+          </label>
+          <input
+            required
+            type="password"
+            style={inputStyle}
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="En az 12 karakter"
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+            Yeni Parola Tekrar *
+          </label>
+          <input
+            required
+            type="password"
+            style={inputStyle}
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="Yeni parolayı tekrar girin"
+          />
+        </div>
+
+        {passwordToast && (
+          <div style={{
+            padding: '0.625rem 0.875rem',
+            borderRadius: 8,
+            background: passwordToast.type === 'error' ? 'var(--danger-bg)' : 'var(--success-bg)',
+            border: `1px solid ${passwordToast.type === 'error' ? 'var(--rose)' : 'var(--teal)'}`,
+            color: passwordToast.type === 'error' ? 'var(--rose)' : 'var(--teal)',
+            fontSize: '0.8125rem',
+          }}>
+            {passwordToast.msg}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={passwordSaving}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+            padding: '0.55rem 1.25rem',
+            background: 'var(--surface-muted)', color: 'var(--ink)',
+            border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer',
+            fontSize: '0.875rem', fontWeight: 500, width: 'fit-content',
+          }}
+        >
+          {passwordSaving ? <RefreshCw size={14} className="spin" /> : <KeyRound size={14} />}
+          {passwordSaving ? 'Değiştiriliyor...' : 'Parolayı Güncelle'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ─── Ana Admin Dashboard ──────────────────────────────────────────────────────
 
 export default function AdminDashboard({ session, onBack }) {
@@ -1264,9 +1571,10 @@ export default function AdminDashboard({ session, onBack }) {
 
   const tabs = [
     { id: 'users', label: 'Kullanıcılar', icon: Users, badge: stats?.locked_users || null },
-    { id: 'sessions', label: 'Oturumlar', icon: Monitor },
+    { id: 'sessions', label: 'Sistem Oturumları', icon: Monitor },
     { id: 'organizations', label: 'Kurumlar', icon: Building2 },
     { id: 'audit', label: 'Audit Log', icon: Shield },
+    { id: 'self-settings', label: 'Profil & Güvenlik Ayarlarım', icon: User },
   ];
 
   return (
@@ -1317,11 +1625,11 @@ export default function AdminDashboard({ session, onBack }) {
               color: 'var(--rose)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Shield size={15} />
+              <Settings size={15} />
             </span>
             <div>
-              <strong style={{ fontSize: '0.9375rem', color: 'var(--ink)' }}>Admin Paneli</strong>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--faint)' }}>NeuroOncoTrack-AI Yönetim</div>
+              <strong style={{ fontSize: '0.9375rem', color: 'var(--ink)' }}>Yönetici & Sistem Ayarları</strong>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--faint)' }}>NeuroOncoTrack-AI Yönetim Paneli</div>
             </div>
           </div>
         </div>
@@ -1343,56 +1651,58 @@ export default function AdminDashboard({ session, onBack }) {
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '1.5rem' }}>
 
-        {/* İstatistik Kartları */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '1rem',
-          marginBottom: '2rem',
-        }}>
-          <StatCard
-            icon={Users}
-            label="Toplam Kullanıcı"
-            value={statsLoading ? '—' : stats?.total_users ?? '—'}
-            sub={`${stats?.active_users ?? '—'} aktif`}
-            color="var(--teal)"
-            trend={stats?.new_users_last_30d}
-          />
-          <StatCard
-            icon={Lock}
-            label="Kilitli Hesap"
-            value={statsLoading ? '—' : stats?.locked_users ?? '—'}
-            sub="İnceleme gerekebilir"
-            color={stats?.locked_users > 0 ? 'var(--rose)' : 'var(--muted)'}
-          />
-          <StatCard
-            icon={ShieldCheck}
-            label="MFA Aktif"
-            value={statsLoading ? '—' : `${stats?.mfa_adoption_rate ?? '—'}%`}
-            sub={`${stats?.mfa_enabled_count ?? '—'} kullanıcı`}
-            color="var(--cyan)"
-          />
-          <StatCard
-            icon={Monitor}
-            label="Aktif Oturum"
-            value={statsLoading ? '—' : stats?.active_sessions ?? '—'}
-            sub="Şu an bağlı"
-            color="var(--amber)"
-          />
-          <StatCard
-            icon={Building2}
-            label="Organizasyon"
-            value={statsLoading ? '—' : stats?.total_organizations ?? '—'}
-            color="var(--cyan)"
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="Başarısız Giriş"
-            value={statsLoading ? '—' : stats?.failed_logins_last_24h ?? '—'}
-            sub="Son 24 saat"
-            color={stats?.failed_logins_last_24h > 5 ? 'var(--rose)' : 'var(--amber)'}
-          />
-        </div>
+        {/* İstatistik Kartları (Profil dışındaki sekmelerde görünür) */}
+        {activeTab !== 'self-settings' && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: '1rem',
+            marginBottom: '2rem',
+          }}>
+            <StatCard
+              icon={Users}
+              label="Toplam Kullanıcı"
+              value={statsLoading ? '—' : stats?.total_users ?? '—'}
+              sub={`${stats?.active_users ?? '—'} aktif`}
+              color="var(--teal)"
+              trend={stats?.new_users_last_30d}
+            />
+            <StatCard
+              icon={Lock}
+              label="Kilitli Hesap"
+              value={statsLoading ? '—' : stats?.locked_users ?? '—'}
+              sub="İnceleme gerekebilir"
+              color={stats?.locked_users > 0 ? 'var(--rose)' : 'var(--muted)'}
+            />
+            <StatCard
+              icon={ShieldCheck}
+              label="MFA Aktif"
+              value={statsLoading ? '—' : `${stats?.mfa_adoption_rate ?? '—'}%`}
+              sub={`${stats?.mfa_enabled_count ?? '—'} kullanıcı`}
+              color="var(--cyan)"
+            />
+            <StatCard
+              icon={Monitor}
+              label="Aktif Oturum"
+              value={statsLoading ? '—' : stats?.active_sessions ?? '—'}
+              sub="Şu an bağlı"
+              color="var(--amber)"
+            />
+            <StatCard
+              icon={Building2}
+              label="Organizasyon"
+              value={statsLoading ? '—' : stats?.total_organizations ?? '—'}
+              color="var(--cyan)"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="Başarısız Giriş"
+              value={statsLoading ? '—' : stats?.failed_logins_last_24h ?? '—'}
+              sub="Son 24 saat"
+              color={stats?.failed_logins_last_24h > 5 ? 'var(--rose)' : 'var(--amber)'}
+            />
+          </div>
+        )}
 
         {/* Sekme İçerikleri */}
         <div style={{
@@ -1407,6 +1717,7 @@ export default function AdminDashboard({ session, onBack }) {
           {activeTab === 'sessions' && <SessionsTab />}
           {activeTab === 'organizations' && <OrganizationsTab />}
           {activeTab === 'audit' && <AuditLogTab />}
+          {activeTab === 'self-settings' && <AdminSelfSettingsTab session={session} />}
         </div>
 
         {/* Alt Not */}

@@ -84,11 +84,11 @@ import {
   updateWorkflowStatus,
 } from '../../services/reportService.js';
 import { syncReportToFhir } from '../../services/fhirService.js';
-import { ProfileModal, ChangePasswordModal, SessionsModal } from '../user/UserModals.jsx';
+import { SettingsModal, ProfileModal, ChangePasswordModal, SessionsModal } from '../user/UserModals.jsx';
 
 // ─── Kullanıcı Profil Dropdown Menüsü ────────────────────────────────────────
 
-function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpenAdmin, onOpenProfile, onOpenPassword, onOpenSessions }) {
+function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpenSettings, isAdmin }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -105,40 +105,25 @@ function UserMenu({ currentUser, userInitial, sessionModeLabel, onLogout, onOpen
   }, [open]);
 
   const menuItems = [
-    ...(onOpenAdmin ? [{
-      icon: Shield,
-      label: 'Admin Paneli',
-      detail: 'Kullanıcı ve sistem yönetimi',
-      onClick: () => { setOpen(false); onOpenAdmin(); },
-      divider: false,
-      admin: true,
-    }] : []),
-    {
-      icon: User,
-      label: 'Profil bilgileri',
-      detail: currentUser.email || '',
-      onClick: () => { setOpen(false); if (onOpenProfile) onOpenProfile(); },
-      divider: onOpenAdmin ? true : false,
-    },
-    {
-      icon: KeyRound,
-      label: 'Parola değiştir',
-      detail: 'Hesap güvenliği',
-      onClick: () => { setOpen(false); if (onOpenPassword) onOpenPassword(); },
-      divider: false,
-    },
     {
       icon: Settings,
-      label: 'Oturum yönetimi',
-      detail: currentUser.role || 'PHYSICIAN',
-      onClick: () => { setOpen(false); if (onOpenSessions) onOpenSessions(); },
+      label: 'Ayarlar',
+      detail: isAdmin ? 'Yönetici paneli ve sistem ayarları' : 'Profil, parola ve oturum ayarları',
+      onClick: () => {
+        setOpen(false);
+        if (onOpenSettings) onOpenSettings();
+      },
       divider: true,
+      admin: isAdmin,
     },
     {
       icon: LogOut,
       label: 'Çıkış yap',
       detail: 'Oturumu sonlandır',
-      onClick: () => { setOpen(false); onLogout(); },
+      onClick: () => {
+        setOpen(false);
+        onLogout();
+      },
       divider: false,
       danger: true,
     },
@@ -1577,10 +1562,14 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             userInitial={userInitial}
             sessionModeLabel={sessionModeLabel}
             onLogout={onLogout}
-            onOpenAdmin={onOpenAdmin}
-            onOpenProfile={() => setActiveUserModal('profile')}
-            onOpenPassword={() => setActiveUserModal('password')}
-            onOpenSessions={() => setActiveUserModal('sessions')}
+            isAdmin={session?.user?.role === 'ADMIN'}
+            onOpenSettings={() => {
+              if (session?.user?.role === 'ADMIN' && onOpenAdmin) {
+                onOpenAdmin();
+              } else {
+                setActiveUserModal('settings');
+              }
+            }}
           />
         </div>
       </header>
@@ -1728,6 +1717,12 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
         </section>
       </div>
 
+      {activeUserModal === 'settings' && (
+        <SettingsModal
+          session={session}
+          onClose={() => setActiveUserModal(null)}
+        />
+      )}
       {activeUserModal === 'profile' && (
         <ProfileModal
           session={session}
