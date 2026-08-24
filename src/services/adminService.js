@@ -125,7 +125,26 @@ export async function getAdminUsers({ page = 1, search = '', role = '', status =
 
 export async function patchAdminUser(userId, updates) {
   const data = await callAdmin(`/admin/users/${userId}`, { method: 'PATCH', body: updates });
-  return data ?? { success: true, message: 'Güncelleme uygulandı (mock).' };
+  if (!data) {
+    const user = MOCK_USERS.find(u => u.id === userId);
+    if (user) {
+      Object.assign(user, updates);
+    }
+    return { success: true, message: 'Güncelleme uygulandı (mock).' };
+  }
+  return data;
+}
+
+export async function deleteAdminUser(userId) {
+  const data = await callAdmin(`/admin/users/${userId}`, { method: 'DELETE' });
+  if (!data) {
+    const idx = MOCK_USERS.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      MOCK_USERS.splice(idx, 1);
+    }
+    return { success: true, message: 'Kullanıcı silindi (mock).' };
+  }
+  return data;
 }
 
 // ─── Oturum İzleme ────────────────────────────────────────────────────────────

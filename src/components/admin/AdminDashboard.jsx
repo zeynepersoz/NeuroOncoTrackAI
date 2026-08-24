@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
   ArrowLeft,
   Building2,
@@ -14,7 +15,9 @@ import {
   Lock,
   LogOut,
   Monitor,
+  Pencil,
   RefreshCw,
+  Save,
   Search,
   Shield,
   ShieldAlert,
@@ -26,9 +29,11 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  X,
   XCircle,
 } from 'lucide-react';
 import {
+  deleteAdminUser,
   getAdminAuditLog,
   getAdminOrganizations,
   getAdminSessions,
@@ -260,6 +265,452 @@ function SelectFilter({ value, onChange, options, placeholder }) {
   );
 }
 
+// ─── Kullanıcı Düzenleme Modalı ──────────────────────────────────────────────
+
+function EditUserModal({ user, onClose, onSave, onDelete }) {
+  const [formData, setFormData] = useState({
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
+    title: user?.title || '',
+    email: user?.email || '',
+    role: user?.role || 'PHYSICIAN',
+    organization_name: user?.organization_name || '',
+    is_active: user?.is_active ?? true,
+    is_locked: user?.is_locked ?? false,
+    must_change_password: user?.must_change_password ?? false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isMouseDownOnBackdrop = useRef(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(user.id, formData);
+      onClose();
+    } catch {
+      // Parent toast gösterir
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete(user.id);
+      onClose();
+    } catch {
+      // Parent toast gösterir
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    isMouseDownOnBackdrop.current = (e.target === e.currentTarget);
+  };
+
+  const handleMouseUp = (e) => {
+    if (isMouseDownOnBackdrop.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    isMouseDownOnBackdrop.current = false;
+  };
+
+  const inputStyle = {
+    width: '100%',
+    boxSizing: 'border-box',
+    background: 'var(--surface-muted)',
+    border: '1px solid var(--line)',
+    borderRadius: 8,
+    padding: '0.5rem 0.75rem',
+    color: 'var(--ink)',
+    fontSize: '0.875rem',
+    outline: 'none',
+  };
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10000,
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+      }}
+    >
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 16,
+          boxShadow: 'var(--shadow)',
+          width: '100%',
+          maxWidth: 540,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          color: 'var(--ink)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Başlık */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1.25rem 1.5rem',
+          borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{
+              width: 36, height: 36, borderRadius: 9,
+              background: 'color-mix(in srgb, var(--teal) 12%, transparent)',
+              color: 'var(--teal)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <User size={18} />
+            </span>
+            <div>
+              <strong style={{ fontSize: '1rem', display: 'block', color: 'var(--ink)' }}>Kullanıcıyı Düzenle</strong>
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{user?.email}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid var(--line)',
+              cursor: 'pointer', color: 'var(--muted)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Form İçeriği */}
+        <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                Ad *
+              </label>
+              <input
+                required
+                style={inputStyle}
+                value={formData.first_name}
+                onChange={e => setFormData(p => ({ ...p, first_name: e.target.value }))}
+                placeholder="Ad"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                Soyad *
+              </label>
+              <input
+                required
+                style={inputStyle}
+                value={formData.last_name}
+                onChange={e => setFormData(p => ({ ...p, last_name: e.target.value }))}
+                placeholder="Soyad"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                Unvan
+              </label>
+              <input
+                style={inputStyle}
+                value={formData.title}
+                onChange={e => setFormData(p => ({ ...p, title: e.target.value }))}
+                placeholder="Dr., Prof. Dr., Uz. Dr."
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                Sistem Rolü *
+              </label>
+              <select
+                style={{ ...inputStyle, cursor: 'pointer' }}
+                value={formData.role}
+                onChange={e => setFormData(p => ({ ...p, role: e.target.value }))}
+              >
+                <option value="PHYSICIAN">Hekim (PHYSICIAN)</option>
+                <option value="RADIOLOGIST">Radyolog (RADIOLOGIST)</option>
+                <option value="RESEARCHER">Araştırmacı (RESEARCHER)</option>
+                <option value="ADMIN">Yönetici (ADMIN)</option>
+                <option value="VIEWER">Gözlemci (VIEWER)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+              E-posta Adresi *
+            </label>
+            <input
+              required
+              type="email"
+              style={inputStyle}
+              value={formData.email}
+              onChange={e => setFormData(p => ({ ...p, email: e.target.value }))}
+              placeholder="ornek@hastane.edu.tr"
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+              Kurum / Organizasyon
+            </label>
+            <input
+              style={inputStyle}
+              value={formData.organization_name}
+              onChange={e => setFormData(p => ({ ...p, organization_name: e.target.value }))}
+              placeholder="Kurum adı"
+            />
+          </div>
+
+          {/* Durum & Güvenlik Ayarları */}
+          <div style={{
+            background: 'var(--surface-muted)',
+            border: '1px solid var(--line)',
+            borderRadius: 10,
+            padding: '1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+          }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Hesap Durumu & Güvenlik
+            </span>
+
+            {/* 3 Durum Seçici (Aktif / Kilitli / Pasif) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, is_active: true, is_locked: false }))}
+                style={{
+                  padding: '0.55rem 0.5rem',
+                  borderRadius: 8,
+                  border: `1px solid ${formData.is_active && !formData.is_locked ? 'var(--teal)' : 'var(--line)'}`,
+                  background: formData.is_active && !formData.is_locked ? 'color-mix(in srgb, var(--teal) 14%, transparent)' : 'var(--surface)',
+                  color: formData.is_active && !formData.is_locked ? 'var(--teal)' : 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <CheckCircle size={14} /> Aktif
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, is_locked: true }))}
+                style={{
+                  padding: '0.55rem 0.5rem',
+                  borderRadius: 8,
+                  border: `1px solid ${formData.is_locked ? 'var(--rose)' : 'var(--line)'}`,
+                  background: formData.is_locked ? 'color-mix(in srgb, var(--rose) 14%, transparent)' : 'var(--surface)',
+                  color: formData.is_locked ? 'var(--rose)' : 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <Lock size={14} /> Kilitli
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(p => ({ ...p, is_active: false, is_locked: false }))}
+                style={{
+                  padding: '0.55rem 0.5rem',
+                  borderRadius: 8,
+                  border: `1px solid ${!formData.is_active && !formData.is_locked ? 'var(--amber)' : 'var(--line)'}`,
+                  background: !formData.is_active && !formData.is_locked ? 'color-mix(in srgb, var(--amber) 14%, transparent)' : 'var(--surface)',
+                  color: !formData.is_active && !formData.is_locked ? 'var(--amber)' : 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <UserMinus size={14} /> Pasif
+              </button>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+              <input
+                type="checkbox"
+                checked={formData.must_change_password}
+                onChange={e => setFormData(p => ({ ...p, must_change_password: e.target.checked }))}
+                style={{ accentColor: 'var(--amber)', width: 16, height: 16 }}
+              />
+              <span>İlk girişte parola değişimini zorunlu kıl</span>
+            </label>
+          </div>
+
+          {/* Aksiyon Butonları & Silme Alanı */}
+          <div style={{
+            borderTop: '1px solid var(--line)',
+            paddingTop: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            flexWrap: 'wrap',
+          }}>
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.875rem',
+                  background: 'var(--danger-bg)',
+                  border: '1px solid var(--rose)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  color: 'var(--rose)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                }}
+              >
+                <Trash2 size={14} />
+                Kullanıcıyı Sil
+              </button>
+            ) : (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                background: 'var(--danger-bg)',
+                padding: '0.35rem 0.75rem',
+                borderRadius: 8,
+                border: '1px solid var(--rose)',
+              }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--rose)', fontWeight: 500 }}>
+                  Silinsin mi?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  style={{
+                    padding: '0.25rem 0.6rem',
+                    background: 'var(--rose)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {deleting ? 'Siliniyor...' : 'Evet, Sil'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: 'transparent',
+                    color: 'var(--muted)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  Vazgeç
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.625rem' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: 'var(--surface-muted)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  color: 'var(--muted)',
+                  fontSize: '0.875rem',
+                }}
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 1.25rem',
+                  background: 'var(--teal)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                {saving ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Kullanıcı Tablosu ────────────────────────────────────────────────────────
 
 function UsersTab({ lockedCount }) {
@@ -268,7 +719,7 @@ function UsersTab({ lockedCount }) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [actionLoading, setActionLoading] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
   const [toast, setToast] = useState(null);
 
   const load = useCallback(async () => {
@@ -288,23 +739,25 @@ function UsersTab({ lockedCount }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAction = async (userId, action) => {
-    setActionLoading(userId + action);
+  const handleSaveUser = async (userId, formData) => {
     try {
-      const updates = {
-        lock: { is_locked: true },
-        unlock: { is_locked: false },
-        deactivate: { is_active: false },
-        activate: { is_active: true },
-        force_password: { must_change_password: true },
-      }[action];
-      await patchAdminUser(userId, updates);
-      showToast('İşlem başarıyla uygulandı.');
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
+      await patchAdminUser(userId, formData);
+      showToast('Kullanıcı bilgileri başarıyla güncellendi.');
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...formData } : u));
     } catch {
-      showToast('İşlem başarısız oldu.', 'danger');
-    } finally {
-      setActionLoading('');
+      showToast('Kullanıcı güncellenemedi.', 'danger');
+      throw new Error();
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    try {
+      await deleteAdminUser(userId);
+      showToast('Kullanıcı sistemden silindi.');
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch {
+      showToast('Kullanıcı silinemedi.', 'danger');
+      throw new Error();
     }
   };
 
@@ -331,6 +784,15 @@ function UsersTab({ lockedCount }) {
         </div>
       )}
 
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSave={handleSaveUser}
+          onDelete={handleDeleteUser}
+        />
+      )}
+
       <FilterBar
         search={search}
         onSearch={setSearch}
@@ -347,6 +809,7 @@ function UsersTab({ lockedCount }) {
               { value: 'PHYSICIAN', label: 'Hekim' },
               { value: 'RADIOLOGIST', label: 'Radyolog' },
               { value: 'RESEARCHER', label: 'Araştırmacı' },
+              { value: 'VIEWER', label: 'Gözlemci' },
             ]}
           />,
           <SelectFilter
@@ -388,7 +851,6 @@ function UsersTab({ lockedCount }) {
               </td></tr>
             ) : users.map(user => {
               const badge = statusBadge(user);
-              const busy = actionLoading.startsWith(user.id);
               return (
                 <tr key={user.id} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.1s' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-muted)'}
@@ -459,34 +921,30 @@ function UsersTab({ lockedCount }) {
                   </td>
                   {/* İşlemler */}
                   <td style={{ padding: '0.75rem' }}>
-                    <div style={{ display: 'flex', gap: '0.35rem' }}>
-                      {user.is_locked ? (
-                        <button title="Kilidi aç" onClick={() => handleAction(user.id, 'unlock')} disabled={busy}
-                          style={actionBtn('var(--teal)')}>
-                          <Unlock size={13} />
-                        </button>
-                      ) : (
-                        <button title="Kilitle" onClick={() => handleAction(user.id, 'lock')} disabled={busy}
-                          style={actionBtn('var(--amber)')}>
-                          <Lock size={13} />
-                        </button>
-                      )}
-                      {user.is_active ? (
-                        <button title="Pasifleştir" onClick={() => handleAction(user.id, 'deactivate')} disabled={busy}
-                          style={actionBtn('var(--muted)')}>
-                          <UserMinus size={13} />
-                        </button>
-                      ) : (
-                        <button title="Aktifleştir" onClick={() => handleAction(user.id, 'activate')} disabled={busy}
-                          style={actionBtn('var(--teal)')}>
-                          <UserCheck size={13} />
-                        </button>
-                      )}
-                      <button title="Parola sıfırlamayı zorla" onClick={() => handleAction(user.id, 'force_password')} disabled={busy}
-                        style={actionBtn('var(--cyan)')}>
-                        <KeyRound size={13} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      title="Kullanıcıyı Düzenle"
+                      onClick={() => setEditingUser(user)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.375rem',
+                        padding: '0.35rem 0.75rem',
+                        background: 'color-mix(in srgb, var(--teal) 10%, transparent)',
+                        border: '1px solid color-mix(in srgb, var(--teal) 30%, transparent)',
+                        borderRadius: 7,
+                        cursor: 'pointer',
+                        color: 'var(--teal)',
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 20%, transparent)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 10%, transparent)'}
+                    >
+                      <Pencil size={12} />
+                      <span>Düzenle</span>
+                    </button>
                   </td>
                 </tr>
               );
@@ -496,19 +954,6 @@ function UsersTab({ lockedCount }) {
       </div>
     </div>
   );
-}
-
-function actionBtn(color) {
-  return {
-    width: 28, height: 28,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: `color-mix(in srgb, ${color} 10%, transparent)`,
-    border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-    borderRadius: 6,
-    cursor: 'pointer',
-    color,
-    transition: 'all 0.15s',
-  };
 }
 
 // ─── Oturumlar Sekmesi ────────────────────────────────────────────────────────
