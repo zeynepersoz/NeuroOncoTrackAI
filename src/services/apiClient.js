@@ -29,6 +29,10 @@ export function clearAccessToken() {
 }
 
 export function isEndpointUnavailable(error) {
+  // Canlıda (Production) sahte veriye düşmesini engelle
+  if (import.meta.env.PROD && import.meta.env.VITE_ALLOW_MOCK !== 'true') {
+    return false;
+  }
   return error instanceof ApiError && (error.status === 404 || error.status === 405 || error.status === 501);
 }
 

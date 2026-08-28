@@ -32,6 +32,10 @@ import {
   listSessions,
   revokeSession,
   updateMe,
+  logoutAll,
+  mfaSetup,
+  mfaEnable,
+  mfaDisable,
 } from '../../services/authService.js';
 
 // ─── Genel Modal Çerçevesi ────────────────────────────────────────────────────
@@ -846,6 +850,7 @@ export function SettingsModal({ session, onClose, onProfileUpdate, initialTab = 
     { id: 'profile', label: 'Profil Bilgileri', icon: User },
     { id: 'password', label: 'Parola Değiştir', icon: KeyRound },
     { id: 'sessions', label: 'Aktif Oturumlar', icon: Globe },
+    { id: 'mfa', label: 'İki Faktörlü Doğrulama', icon: ShieldCheck },
   ];
 
   return (
@@ -864,6 +869,7 @@ export function SettingsModal({ session, onClose, onProfileUpdate, initialTab = 
         background: 'var(--surface-muted)',
         padding: '0 1rem',
         gap: '0.25rem',
+        overflowX: 'auto',
       }}>
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -887,6 +893,7 @@ export function SettingsModal({ session, onClose, onProfileUpdate, initialTab = 
                 cursor: 'pointer',
                 marginBottom: -1,
                 transition: 'all 0.15s',
+                whiteSpace: 'nowrap',
               }}
             >
               <Icon size={15} />
@@ -906,6 +913,9 @@ export function SettingsModal({ session, onClose, onProfileUpdate, initialTab = 
         )}
         {activeTab === 'sessions' && (
           <SessionsTabContent onClose={onClose} />
+        )}
+        {activeTab === 'mfa' && (
+          <MfaTabContent session={session} onClose={onClose} onProfileUpdate={onProfileUpdate} />
         )}
       </div>
     </ModalBackdrop>
@@ -1344,8 +1354,30 @@ function SessionsTabContent({ onClose }) {
 
             {otherSessions.length > 0 && (
               <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Diğer Oturumlar ({otherSessions.length})
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Diğer Oturumlar ({otherSessions.length})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await logoutAll({ mode: 'api' });
+                        showToast('Tüm diğer oturumlar sonlandırıldı.');
+                        load();
+                      } catch {
+                        showToast('Oturumlar sonlandırılamadı.', 'error');
+                      }
+                    }}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--rose)', fontSize: '0.75rem', fontWeight: 500,
+                      display: 'flex', alignItems: 'center', gap: '0.25rem',
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    Tümünü Kapat
+                  </button>
                 </div>
                 {otherSessions.map(s => (
                   <SessionCard key={s.id} session={s} isCurrent={false} onRevoke={handleRevoke} revoking={revoking} />
@@ -1389,9 +1421,255 @@ function SessionsTabContent({ onClose }) {
             fontSize: '0.875rem', fontWeight: 500,
           }}
         >
-          Kapat
-        </button>
+          </button>
       </div>
     </div>
   );
 }
+
+function MfaTabContent({ session, onClose, onProfileUpdate }) {
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [step, setStep] = useState('initial'); // 'initial', 'setup', 'disable'
+  const [setupData, setSetupData] = useState(null);
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+
+  const mfaEnabled = session?.user?.mfa_enabled || session?.user?.mfaEnabled;
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleStartSetup = async () => {
+    setLoading(true);
+    try {
+      const data = await mfaSetup();
+      setSetupData(data);
+      setStep('setup');
+    } catch (err) {
+      showToast(err.message || 'MFA kurulumu başlatılamadı.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEnableMfa = async () => {
+    if (!code) { showToast('Doğrulama kodunu girin.', 'error'); return; }
+    setLoading(true);
+    try {
+      await mfaEnable(code);
+      showToast('MFA başarıyla aktifleştirildi.');
+      if (onProfileUpdate) onProfileUpdate({ mfa_enabled: true });
+      setStep('initial');
+    } catch (err) {
+      showToast(err.message || 'MFA aktifleştirilemedi.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    if (!password) { showToast('Mevcut parolanızı girin.', 'error'); return; }
+    setLoading(true);
+    try {
+      await mfaDisable(password);
+      showToast('MFA devre dışı bırakıldı.');
+      if (onProfileUpdate) onProfileUpdate({ mfa_enabled: false });
+      setStep('initial');
+      setPassword('');
+    } catch (err) {
+      showToast(err.message || 'MFA devre dışı bırakılamadı.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {step === 'initial' && (
+          <div style={{ textAlign: 'center', padding: '1rem' }}>
+            {mfaEnabled ? (
+              <>
+                <ShieldCheck size={48} style={{ color: 'var(--teal)', margin: '0 auto 1rem' }} />
+                <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem' }}>İki Faktörlü Doğrulama Aktif</h3>
+                <p style={{ color: 'var(--muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  Hesabınız şu anda ekstra bir güvenlik katmanıyla korunuyor.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep('disable')}
+                  style={{
+                    padding: '0.625rem 1.25rem',
+                    background: 'var(--danger-bg)', color: 'var(--rose)',
+                    border: '1px solid var(--rose)', borderRadius: 8, cursor: 'pointer',
+                    fontSize: '0.875rem', fontWeight: 500,
+                  }}
+                >
+                  MFA'yı Devre Dışı Bırak
+                </button>
+              </>
+            ) : (
+              <>
+                <Shield size={48} style={{ color: 'var(--muted)', margin: '0 auto 1rem' }} />
+                <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem' }}>İki Faktörlü Doğrulama Pasif</h3>
+                <p style={{ color: 'var(--muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  Hesabınızın güvenliğini artırmak için iki faktörlü doğrulamayı aktifleştirin.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleStartSetup}
+                  disabled={loading}
+                  style={{
+                    padding: '0.625rem 1.25rem',
+                    background: 'var(--teal)', color: '#fff',
+                    border: 'none', borderRadius: 8, cursor: 'pointer',
+                    fontSize: '0.875rem', fontWeight: 500,
+                  }}
+                >
+                  {loading ? 'Başlatılıyor...' : 'Kurulumu Başlat'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {step === 'setup' && setupData && (
+          <div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <strong style={{ display: 'block', marginBottom: '0.5rem' }}>1. Authenticator uygulamanıza ekleyin</strong>
+              <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+                Aşağıdaki kodu Google Authenticator veya benzeri bir uygulamaya manuel olarak ekleyin:
+              </p>
+              <div style={{
+                background: 'var(--surface-muted)', padding: '0.75rem', borderRadius: 8,
+                fontFamily: 'monospace', fontSize: '1.125rem', textAlign: 'center', letterSpacing: '0.1em'
+              }}>
+                {setupData.secret}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <strong style={{ display: 'block', marginBottom: '0.5rem' }}>2. Doğrulama kodunu girin</strong>
+              <FormField label="Uygulamadaki 6 haneli kod">
+                <input
+                  type="text"
+                  style={inputStyle}
+                  value={code}
+                  onChange={e => setCode(e.target.value)}
+                  placeholder="000000"
+                  maxLength={6}
+                />
+              </FormField>
+            </div>
+            
+            {setupData.backup_codes && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <strong style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--rose)' }}>Önemli: Yedek Kodlar</strong>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--muted)' }}>Bu kodları güvenli bir yere kaydedin. Cihazınıza erişiminizi kaybederseniz bu kodlarla giriş yapabilirsiniz:</p>
+                <div style={{
+                  background: 'var(--surface-muted)', padding: '0.75rem', borderRadius: 8,
+                  fontFamily: 'monospace', fontSize: '0.875rem', marginTop: '0.5rem',
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem'
+                }}>
+                  {setupData.backup_codes.map((bc, i) => <div key={i}>{bc}</div>)}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setStep('initial')}
+                style={{
+                  padding: '0.5rem 1.25rem', background: 'var(--surface-muted)', border: '1px solid var(--line)',
+                  borderRadius: 8, cursor: 'pointer', color: 'var(--muted)', fontSize: '0.875rem',
+                }}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleEnableMfa}
+                disabled={loading}
+                style={{
+                  padding: '0.5rem 1.25rem', background: 'var(--teal)', color: '#fff',
+                  border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                }}
+              >
+                {loading ? 'Doğrulanıyor...' : 'Aktifleştir'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'disable' && (
+          <div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+              İki faktörlü doğrulamayı devre dışı bırakmak için mevcut parolanızı girin.
+            </p>
+            <FormField label="Mevcut Parolanız">
+              <input
+                type="password"
+                style={inputStyle}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </FormField>
+            
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setStep('initial')}
+                style={{
+                  padding: '0.5rem 1.25rem', background: 'var(--surface-muted)', border: '1px solid var(--line)',
+                  borderRadius: 8, cursor: 'pointer', color: 'var(--muted)', fontSize: '0.875rem',
+                }}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleDisableMfa}
+                disabled={loading}
+                style={{
+                  padding: '0.5rem 1.25rem', background: 'var(--danger-bg)', color: 'var(--rose)',
+                  border: '1px solid var(--rose)', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                }}
+              >
+                {loading ? 'Devre Dışı Bırakılıyor...' : 'Devre Dışı Bırak'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {toast && <Toast msg={toast.msg} type={toast.type} />}
+      </div>
+      
+      {step === 'initial' && (
+        <div style={{
+          padding: '1rem 1.5rem',
+          borderTop: '1px solid var(--line)',
+          display: 'flex', justifyContent: 'flex-end',
+        }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '0.5rem 1.25rem',
+              background: 'var(--teal)', color: '#fff',
+              border: 'none', borderRadius: 8, cursor: 'pointer',
+              fontSize: '0.875rem', fontWeight: 500,
+            }}
+          >
+            Kapat
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+

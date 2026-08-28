@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Server,
   Settings,
   Shield,
   ShieldAlert,
@@ -32,17 +33,45 @@ import {
   Users,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react';
+import ThemeToggle from '../common/ThemeToggle.jsx';
 import {
   deleteAdminUser,
+  forceLogoutAdminUser,
   getAdminAuditLog,
+  getAdminAuditLogDetail,
   getAdminOrganizations,
+  getAdminOrganizationDetail,
+  deactivateAdminOrganization,
   getAdminSessions,
   getAdminStats,
   getAdminUsers,
   patchAdminUser,
   revokeAdminSession,
+  getAdminSecurityTrends,
+  getAdminSecurityOrganizations,
 } from '../../services/adminService.js';
+import {
+  createSuperAdminOrganization,
+  deleteSuperAdminOrganization,
+  deleteSuperAdminUser,
+  forceLogoutSuperAdminUser,
+  getSuperAdminAuditLog,
+  getSuperAdminAuditLogDetail,
+  getSuperAdminOrganizations,
+  getSuperAdminOrganizationDetail,
+  deactivateSuperAdminOrganization,
+    getSuperAdminSessions,
+  getSuperAdminStats,
+  getSuperAdminUsers,
+  MOCK_ALL_ORGANIZATIONS,
+  patchSuperAdminOrganization,
+  patchSuperAdminUser,
+  revokeSuperAdminSession,
+  getSuperAdminSecurityTrends,
+  getSuperAdminSecurityOrganizations,
+} from '../../services/superadminService.js';
 import { changePassword, getMe, updateMe } from '../../services/authService.js';
 
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
@@ -68,6 +97,7 @@ function formatDate(iso) {
 }
 
 const ROLE_LABELS = {
+  SUPERADMIN: 'Süper Yönetici',
   ADMIN: 'Yönetici',
   PHYSICIAN: 'Hekim',
   RADIOLOGIST: 'Radyolog',
@@ -76,6 +106,7 @@ const ROLE_LABELS = {
 };
 
 const ROLE_COLORS = {
+  SUPERADMIN: '#9333ea',       /* purple */
   ADMIN: 'var(--rose)',
   PHYSICIAN: 'var(--teal)',
   RADIOLOGIST: 'var(--cyan)',
@@ -269,7 +300,7 @@ function SelectFilter({ value, onChange, options, placeholder }) {
 
 // ─── Kullanıcı Düzenleme Modalı ──────────────────────────────────────────────
 
-function EditUserModal({ user, onClose, onSave, onDelete }) {
+function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout }) {
   const [formData, setFormData] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
@@ -277,6 +308,7 @@ function EditUserModal({ user, onClose, onSave, onDelete }) {
     email: user?.email || '',
     role: user?.role || 'PHYSICIAN',
     organization_name: user?.organization_name || '',
+    permissions: user?.permissions || [],
     is_active: user?.is_active ?? true,
     is_locked: user?.is_locked ?? false,
     must_change_password: user?.must_change_password ?? false,
@@ -497,6 +529,45 @@ function EditUserModal({ user, onClose, onSave, onDelete }) {
             />
           </div>
 
+          {/* Özel Yetkiler / İzinler */}
+          <div style={{
+            background: 'var(--surface-muted)',
+            border: '1px solid var(--line)',
+            borderRadius: 10,
+            padding: '1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+          }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Özel Yetkiler / İzinler
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              {[
+                { id: 'export_data', label: 'Veri Dışa Aktar' },
+                { id: 'delete_records', label: 'Kayıt Silme' },
+                { id: 'manage_settings', label: 'Sistem Ayarları' },
+                { id: 'view_audit', label: 'Denetim Kayıtları' }
+              ].map(perm => (
+                <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.8125rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions?.includes(perm.id)}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setFormData(p => ({ ...p, permissions: [...(p.permissions || []), perm.id] }));
+                      } else {
+                        setFormData(p => ({ ...p, permissions: (p.permissions || []).filter(x => x !== perm.id) }));
+                      }
+                    }}
+                    style={{ accentColor: 'var(--teal)', width: 16, height: 16 }}
+                  />
+                  <span>{perm.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Durum & Güvenlik Ayarları */}
           <div style={{
             background: 'var(--surface-muted)',
@@ -599,29 +670,57 @@ function EditUserModal({ user, onClose, onSave, onDelete }) {
             gap: '0.5rem',
             flexWrap: 'wrap',
           }}>
-            {!confirmDelete ? (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.45rem 0.875rem',
-                  background: 'var(--danger-bg)',
-                  border: '1px solid var(--rose)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  color: 'var(--rose)',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                }}
-              >
-                <Trash2 size={14} />
-                Kullanıcıyı Sil
-              </button>
-            ) : (
-              <div style={{
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {!confirmDelete ? (
+                <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await onForceLogout(user.id);
+                      onClose();
+                    } catch (e) { }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.875rem',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    color: 'var(--ink)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  <LogOut size={14} />
+                  Oturumları Kapat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.875rem',
+                    background: 'var(--danger-bg)',
+                    border: '1px solid var(--rose)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    color: 'var(--rose)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  <Trash2 size={14} />
+                  Sil
+                </button>
+                </>
+              ) : (
+                <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
@@ -667,6 +766,7 @@ function EditUserModal({ user, onClose, onSave, onDelete }) {
                 </button>
               </div>
             )}
+            </div>
 
             <div style={{ display: 'flex', gap: '0.625rem' }}>
               <button
@@ -715,24 +815,30 @@ function EditUserModal({ user, onClose, onSave, onDelete }) {
 
 // ─── Kullanıcı Tablosu ────────────────────────────────────────────────────────
 
-function UsersTab({ lockedCount }) {
+function UsersTab({ lockedCount, isSuperAdmin }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [orgFilter, setOrgFilter] = useState('');
   const [editingUser, setEditingUser] = useState(null);
   const [toast, setToast] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAdminUsers({ search, role: roleFilter, status: statusFilter });
+      let data;
+      if (isSuperAdmin) {
+        data = await getSuperAdminUsers({ search, role: roleFilter, status: statusFilter, organizationId: orgFilter });
+      } else {
+        data = await getAdminUsers({ search, role: roleFilter, status: statusFilter });
+      }
       setUsers(data.users || []);
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, statusFilter]);
+  }, [search, roleFilter, statusFilter, orgFilter, isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -743,7 +849,11 @@ function UsersTab({ lockedCount }) {
 
   const handleSaveUser = async (userId, formData) => {
     try {
-      await patchAdminUser(userId, formData);
+      if (isSuperAdmin) {
+        await patchSuperAdminUser(userId, formData);
+      } else {
+        await patchAdminUser(userId, formData);
+      }
       showToast('Kullanıcı bilgileri başarıyla güncellendi.');
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...formData } : u));
     } catch {
@@ -754,11 +864,29 @@ function UsersTab({ lockedCount }) {
 
   const handleDeleteUser = async (userId) => {
     try {
-      await deleteAdminUser(userId);
+      if (isSuperAdmin) {
+        await deleteSuperAdminUser(userId);
+      } else {
+        await deleteAdminUser(userId);
+      }
       showToast('Kullanıcı sistemden silindi.');
       setUsers(prev => prev.filter(u => u.id !== userId));
     } catch {
       showToast('Kullanıcı silinemedi.', 'danger');
+      throw new Error();
+    }
+  };
+
+  const handleForceLogoutUser = async (userId) => {
+    try {
+      if (isSuperAdmin) {
+        await forceLogoutSuperAdminUser(userId);
+      } else {
+        await forceLogoutAdminUser(userId);
+      }
+      showToast('Kullanıcının tüm oturumları zorla kapatıldı.');
+    } catch {
+      showToast('Oturumlar kapatılamadı.', 'danger');
       throw new Error();
     }
   };
@@ -768,6 +896,11 @@ function UsersTab({ lockedCount }) {
     if (!user.is_active) return { label: 'Pasif', color: 'var(--muted)' };
     return { label: 'Aktif', color: 'var(--teal)' };
   };
+
+  // Kurum listesi (sadece superadmin için)
+  const orgOptions = isSuperAdmin
+    ? MOCK_ALL_ORGANIZATIONS.map(o => ({ value: o.id, label: o.name }))
+    : [];
 
   return (
     <div>
@@ -792,6 +925,8 @@ function UsersTab({ lockedCount }) {
           onClose={() => setEditingUser(null)}
           onSave={handleSaveUser}
           onDelete={handleDeleteUser}
+          onForceLogout={handleForceLogoutUser}
+          isSuperAdmin={isSuperAdmin}
         />
       )}
 
@@ -801,12 +936,22 @@ function UsersTab({ lockedCount }) {
         loading={loading}
         onRefresh={load}
         filters={[
+          ...(isSuperAdmin ? [
+            <SelectFilter
+              key="org"
+              value={orgFilter}
+              onChange={setOrgFilter}
+              placeholder="Tüm kurumlar"
+              options={orgOptions}
+            />,
+          ] : []),
           <SelectFilter
             key="role"
             value={roleFilter}
             onChange={setRoleFilter}
             placeholder="Tüm roller"
             options={[
+              ...(isSuperAdmin ? [{ value: 'SUPERADMIN', label: 'Süper Yönetici' }] : []),
               { value: 'ADMIN', label: 'Yönetici' },
               { value: 'PHYSICIAN', label: 'Hekim' },
               { value: 'RADIOLOGIST', label: 'Radyolog' },
@@ -827,6 +972,23 @@ function UsersTab({ lockedCount }) {
           />,
         ]}
       />
+
+      {/* Bilgi bandı: SUPERADMIN görüyor */}
+      {isSuperAdmin && (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.5rem 0.875rem',
+          background: 'color-mix(in srgb, #9333ea 8%, transparent)',
+          border: '1px solid color-mix(in srgb, #9333ea 25%, transparent)',
+          borderRadius: 8,
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
+          fontSize: '0.8125rem',
+          color: '#9333ea',
+        }}>
+          <Shield size={14} />
+          <span><strong>Süper Yönetici görünümü</strong> — Tüm kurumların kullanıcıları listeleniyor. {orgFilter ? 'Kurum filtresi aktif.' : ''}</span>
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
@@ -960,7 +1122,7 @@ function UsersTab({ lockedCount }) {
 
 // ─── Oturumlar Sekmesi ────────────────────────────────────────────────────────
 
-function SessionsTab() {
+function SessionsTab({ isSuperAdmin }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -969,19 +1131,25 @@ function SessionsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAdminSessions();
+      const data = isSuperAdmin
+        ? await getSuperAdminSessions()
+        : await getAdminSessions();
       setSessions(data.sessions || []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleRevoke = async (sessionId) => {
     setRevoking(sessionId);
     try {
-      await revokeAdminSession(sessionId);
+      if (isSuperAdmin) {
+        await revokeSuperAdminSession(sessionId);
+      } else {
+        await revokeAdminSession(sessionId);
+      }
       setSessions(prev => prev.filter(s => s.id !== sessionId));
     } finally {
       setRevoking('');
@@ -990,7 +1158,9 @@ function SessionsTab() {
 
   const filtered = sessions.filter(s => {
     const q = search.toLowerCase();
-    return !q || s.user_email?.toLowerCase().includes(q) || s.ip_address?.includes(q);
+    const emailStr = String(s.user_email || '').toLowerCase();
+    const ipStr = String(s.ip_address || '').toLowerCase();
+    return !q || emailStr.includes(q) || ipStr.includes(q);
   });
 
   const parseDevice = (ua = '') => {
@@ -1058,7 +1228,17 @@ function SessionsTab() {
                     onClick={() => handleRevoke(sess.id)}
                     disabled={revoking === sess.id}
                     title="Oturumu sonlandır"
-                    style={actionBtn('var(--rose)')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '0.35rem 0.5rem',
+                      background: 'color-mix(in srgb, var(--rose) 10%, transparent)',
+                      border: '1px solid color-mix(in srgb, var(--rose) 30%, transparent)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      color: 'var(--rose)',
+                      transition: 'all 0.2s',
+                    }}
                   >
                     {revoking === sess.id ? <RefreshCw size={13} className="spin" /> : <Trash2 size={13} />}
                   </button>
@@ -1074,7 +1254,7 @@ function SessionsTab() {
 
 // ─── Organizasyonlar Sekmesi ──────────────────────────────────────────────────
 
-function OrganizationsTab() {
+function OrganizationsTab({ isSuperAdmin }) {
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -1082,12 +1262,14 @@ function OrganizationsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAdminOrganizations();
+      const data = isSuperAdmin
+        ? await getSuperAdminOrganizations()
+        : await getAdminOrganizations();
       setOrgs(data.organizations || []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1103,8 +1285,63 @@ function OrganizationsTab() {
     return !q || o.name?.toLowerCase().includes(q) || o.code?.toLowerCase().includes(q);
   });
 
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [orgDetail, setOrgDetail] = useState(null);
+
+  const fetchOrgDetail = async (id) => {
+    setSelectedOrgId(id);
+    setOrgDetail(null);
+    try {
+      const data = isSuperAdmin ? await getSuperAdminOrganizationDetail(id) : await getAdminOrganizationDetail(id);
+      setOrgDetail(data);
+    } catch {
+      alert("Kurum detayı yüklenemedi.");
+      setSelectedOrgId(null);
+    }
+  };
+
+  const handleDeactivate = async (id) => {
+    if (!confirm("Kurumu askıya almak (pasifleştirmek) istediğinize emin misiniz?")) return;
+    try {
+      if (isSuperAdmin) await deactivateSuperAdminOrganization(id);
+      else await deactivateAdminOrganization(id);
+      alert("Kurum başarıyla pasifleştirildi.");
+      load();
+      if (selectedOrgId === id) setSelectedOrgId(null);
+    } catch {
+      alert("İşlem başarısız.");
+    }
+  };
+
   return (
     <div>
+      {selectedOrgId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex',
+          alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setSelectedOrgId(null)}>
+          <div style={{
+            background: 'var(--surface)', padding: '2rem', borderRadius: 12, width: 500, maxWidth: '90%',
+            maxHeight: '90vh', overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, borderBottom: '1px solid var(--line)', paddingBottom: '0.5rem' }}>Kurum Detayı</h3>
+            {!orgDetail ? <div style={{ padding: '2rem', textAlign: 'center' }}><RefreshCw className="spin" size={24} /></div> : (
+              <div>
+                <pre style={{ fontSize: '0.75rem', color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {JSON.stringify(orgDetail, null, 2)}
+                </pre>
+                <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--line)', paddingTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'space-between' }}>
+                  <button onClick={() => handleDeactivate(orgDetail.id)} style={{ padding: '0.5rem 1rem', background: 'var(--danger-bg)', color: 'var(--rose)', border: '1px solid var(--rose)', borderRadius: 6, cursor: 'pointer' }}>
+                    Askıya Al (Pasifleştir)
+                  </button>
+                  <button onClick={() => setSelectedOrgId(null)} style={{ padding: '0.5rem 1rem', background: 'var(--surface-muted)', border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer' }}>Kapat</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <FilterBar search={search} onSearch={setSearch} loading={loading} onRefresh={load} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
         {loading ? (
@@ -1144,9 +1381,12 @@ function OrganizationsTab() {
                 {org.is_active ? 'Aktif' : 'Pasif'}
               </span>
             </div>
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', fontSize: '0.8125rem', color: 'var(--muted)' }}>
-              <span><Users size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />{org.user_count || 0} kullanıcı</span>
-              <span>{ORG_TYPE_LABELS[org.org_type] || org.org_type || '—'}</span>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', fontSize: '0.8125rem', color: 'var(--muted)', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '1.5rem' }}>
+                <span><Users size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />{org.user_count || 0}</span>
+                <span>{ORG_TYPE_LABELS[org.org_type] || org.org_type || '—'}</span>
+              </div>
+              <button onClick={() => fetchOrgDetail(org.id)} style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', background: 'var(--surface-muted)', border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer' }}>Yönet</button>
             </div>
           </div>
         ))}
@@ -1157,7 +1397,7 @@ function OrganizationsTab() {
 
 // ─── Audit Log Sekmesi ────────────────────────────────────────────────────────
 
-function AuditLogTab() {
+function AuditLogTab({ isSuperAdmin }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -1166,12 +1406,14 @@ function AuditLogTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAdminAuditLog({ severity });
+      const data = isSuperAdmin
+        ? await getSuperAdminAuditLog({ severity })
+        : await getAdminAuditLog({ severity });
       setLogs(data.logs || []);
     } finally {
       setLoading(false);
     }
-  }, [severity]);
+  }, [severity, isSuperAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1187,8 +1429,45 @@ function AuditLogTab() {
     danger: <XCircle size={14} />,
   };
 
+  const [selectedLogId, setSelectedLogId] = useState(null);
+  const [logDetail, setLogDetail] = useState(null);
+
+  const fetchLogDetail = async (id) => {
+    setSelectedLogId(id);
+    setLogDetail(null);
+    try {
+      const data = isSuperAdmin ? await getSuperAdminAuditLogDetail(id) : await getAdminAuditLogDetail(id);
+      setLogDetail(data);
+    } catch {
+      alert("Detay yüklenemedi.");
+      setSelectedLogId(null);
+    }
+  };
+
   return (
     <div>
+      {selectedLogId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex',
+          alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setSelectedLogId(null)}>
+          <div style={{
+            background: 'var(--surface)', padding: '2rem', borderRadius: 12, width: 500, maxWidth: '90%',
+            maxHeight: '90vh', overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, borderBottom: '1px solid var(--line)', paddingBottom: '0.5rem' }}>Denetim Kaydı Detayı</h3>
+            {!logDetail ? <div style={{ padding: '2rem', textAlign: 'center' }}><RefreshCw className="spin" size={24} /></div> : (
+              <pre style={{ fontSize: '0.75rem', color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {JSON.stringify(logDetail, null, 2)}
+              </pre>
+            )}
+            <div style={{ marginTop: '1rem', textAlign: 'right' }}>
+              <button onClick={() => setSelectedLogId(null)} style={{ padding: '0.5rem 1rem', background: 'var(--surface-muted)', border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer' }}>Kapat</button>
+            </div>
+          </div>
+        </div>
+      )}
       <FilterBar
         search={search}
         onSearch={setSearch}
@@ -1236,9 +1515,12 @@ function AuditLogTab() {
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>{log.user_email}</span>
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-                    {formatDate(log.timestamp)}
-                  </span>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                      {formatDate(log.timestamp)}
+                    </span>
+                    <button type="button" onClick={() => fetchLogDetail(log.id)} style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: 4, padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}>Detay Görüntüle</button>
+                  </div>
                 </div>
                 {log.detail && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 2 }}>{log.detail}</div>
@@ -1248,6 +1530,110 @@ function AuditLogTab() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ─── Güvenlik Analizi Sekmesi ──────────────────────────────────────────────────
+
+function SecurityAnalysisTab({ isSuperAdmin }) {
+  const [trends, setTrends] = useState([]);
+  const [orgs, setOrgs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [interval, setIntervalState] = useState('day');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [trendData, orgData] = await Promise.all([
+        isSuperAdmin ? getSuperAdminSecurityTrends(interval) : getAdminSecurityTrends(interval),
+        isSuperAdmin ? getSuperAdminSecurityOrganizations() : getAdminSecurityOrganizations(),
+      ]);
+      setTrends(trendData?.data || []);
+      setOrgs(orgData?.organizations || []);
+    } catch {
+      alert("Güvenlik verileri yüklenirken hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  }, [isSuperAdmin, interval]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--ink)' }}>Güvenlik Trendleri</h3>
+        <select value={interval} onChange={e => setIntervalState(e.target.value)} style={{ padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <option value="hour">Saatlik</option>
+          <option value="day">Günlük</option>
+          <option value="week">Haftalık</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '2rem', textAlign: 'center' }}><RefreshCw className="spin" size={24} color="var(--muted)" /></div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+              <thead style={{ background: 'var(--surface-muted)' }}>
+                <tr>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Tarih</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Başarısız Giriş</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Yetki İhlali (Denial)</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Kilitlenen Kullanıcı</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Sonlandırılan Oturum</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trends.length === 0 && <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Veri bulunamadı.</td></tr>}
+                {trends.map((t, idx) => (
+                  <tr key={idx} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--ink)' }}>{t.timestamp}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--rose)' }}>{t.failed_logins}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--amber)' }}>{t.authorization_denials}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--rose)' }}>{t.user_locks}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--cyan)' }}>{t.session_terminations}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 style={{ margin: '1rem 0 0 0', fontSize: '1rem', color: 'var(--ink)' }}>Kurum Bazlı Güvenlik Olayları</h3>
+          <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+              <thead style={{ background: 'var(--surface-muted)' }}>
+                <tr>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Kurum Adı</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Toplam Kullanıcı</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Aktif Kullanıcı</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Kilitli Hesap</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Aktif Oturum</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600 }}>Toplam Olay (Log)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orgs.length === 0 && <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Veri bulunamadı.</td></tr>}
+                {orgs.map((o) => (
+                  <tr key={o.organization_id} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td style={{ padding: '0.75rem', color: 'var(--ink)' }}>
+                      <div>{o.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>{o.code}</div>
+                    </td>
+                    <td style={{ padding: '0.75rem', color: 'var(--ink)' }}>{o.user_count}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--teal)' }}>{o.active_user_count}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--rose)' }}>{o.locked_user_count}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--cyan)' }}>{o.active_session_count}</td>
+                    <td style={{ padding: '0.75rem', color: 'var(--amber)', fontWeight: 600 }}>{o.security_event_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1559,15 +1945,17 @@ function AdminSelfSettingsTab({ session }) {
 
 // ─── Ana Admin Dashboard ──────────────────────────────────────────────────────
 
-export default function AdminDashboard({ session, onBack }) {
+export default function AdminDashboard({ session, onBack, theme, setTheme }) {
+  const isSuperAdmin = session?.user?.role === 'SUPERADMIN';
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('users');
 
   useEffect(() => {
     setStatsLoading(true);
-    getAdminStats().then(setStats).finally(() => setStatsLoading(false));
-  }, []);
+    const fetchStats = isSuperAdmin ? getSuperAdminStats() : getAdminStats();
+    fetchStats.then(setStats).finally(() => setStatsLoading(false));
+  }, [isSuperAdmin]);
 
   const tabs = [
     { id: 'users', label: 'Kullanıcılar', icon: Users, badge: stats?.locked_users || null },
@@ -1576,6 +1964,20 @@ export default function AdminDashboard({ session, onBack }) {
     { id: 'audit', label: 'Audit Log', icon: Shield },
     { id: 'self-settings', label: 'Profil & Güvenlik Ayarlarım', icon: User },
   ];
+
+  // Rozet rengi ve etiketi role göre
+  const roleBadgeStyle = isSuperAdmin
+    ? {
+        background: 'color-mix(in srgb, #9333ea 12%, transparent)',
+        color: '#9333ea',
+        border: '1px solid color-mix(in srgb, #9333ea 30%, transparent)',
+      }
+    : {
+        background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
+        color: 'var(--amber)',
+        border: '1px solid color-mix(in srgb, var(--amber) 30%, transparent)',
+      };
+  const roleBadgeLabel = isSuperAdmin ? 'SUPERADMIN' : 'ADMIN';
 
   return (
     <div style={{
@@ -1621,27 +2023,35 @@ export default function AdminDashboard({ session, onBack }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{
               width: 28, height: 28, borderRadius: 8,
-              background: 'color-mix(in srgb, var(--rose) 15%, transparent)',
-              color: 'var(--rose)',
+              background: isSuperAdmin
+                ? 'color-mix(in srgb, #9333ea 15%, transparent)'
+                : 'color-mix(in srgb, var(--rose) 15%, transparent)',
+              color: isSuperAdmin ? '#9333ea' : 'var(--rose)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <Settings size={15} />
             </span>
             <div>
-              <strong style={{ fontSize: '0.9375rem', color: 'var(--ink)' }}>Yönetici & Sistem Ayarları</strong>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--faint)' }}>NeuroOncoTrack-AI Yönetim Paneli</div>
+              <strong style={{ fontSize: '0.9375rem', color: 'var(--ink)' }}>
+                {isSuperAdmin ? 'Süper Yönetici Paneli' : 'Yönetici & Sistem Ayarları'}
+              </strong>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--faint)' }}>
+                {isSuperAdmin
+                  ? 'Tüm kurumları yönet — NeuroOncoTrack-AI'
+                  : 'NeuroOncoTrack-AI Yönetim Paneli'}
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <ThemeToggle theme={theme} setTheme={setTheme} />
+          <div style={{ width: 1, height: 20, background: 'var(--line)' }} />
           <span style={{
-            background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
-            color: 'var(--amber)',
-            border: '1px solid color-mix(in srgb, var(--amber) 30%, transparent)',
             borderRadius: 6, padding: '2px 10px', fontSize: '0.75rem', fontWeight: 600,
+            ...roleBadgeStyle,
           }}>
-            ADMIN
+            {roleBadgeLabel}
           </span>
           <span style={{ fontSize: '0.8125rem', color: 'var(--muted)' }}>
             {session?.user?.name || session?.user?.email || 'Yönetici'}
@@ -1650,6 +2060,25 @@ export default function AdminDashboard({ session, onBack }) {
       </header>
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '1.5rem' }}>
+
+        {/* Superadmin bilgi bandı */}
+        {isSuperAdmin && activeTab !== 'self-settings' && (
+          <div style={{
+            marginBottom: '1.25rem',
+            padding: '0.625rem 1rem',
+            background: 'color-mix(in srgb, #9333ea 6%, transparent)',
+            border: '1px solid color-mix(in srgb, #9333ea 20%, transparent)',
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', gap: '0.625rem',
+            fontSize: '0.8125rem', color: '#9333ea',
+          }}>
+            <Shield size={15} />
+            <span>
+              <strong>Süper Yönetici görünümü</strong> — Tüm kurumların verileri görüntüleniyor.
+              {stats?.total_organizations ? ` (${stats.total_organizations} kurum, ${stats.total_users} kullanıcı)` : ''}
+            </span>
+          </div>
+        )}
 
         {/* İstatistik Kartları (Profil dışındaki sekmelerde görünür) */}
         {activeTab !== 'self-settings' && (
@@ -1690,8 +2119,9 @@ export default function AdminDashboard({ session, onBack }) {
             />
             <StatCard
               icon={Building2}
-              label="Organizasyon"
+              label={isSuperAdmin ? 'Toplam Kurum' : 'Organizasyon'}
               value={statsLoading ? '—' : stats?.total_organizations ?? '—'}
+              sub={isSuperAdmin && stats?.active_organizations ? `${stats.active_organizations} aktif` : undefined}
               color="var(--cyan)"
             />
             <StatCard
@@ -1713,10 +2143,10 @@ export default function AdminDashboard({ session, onBack }) {
         }}>
           <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
-          {activeTab === 'users' && <UsersTab lockedCount={stats?.locked_users} />}
-          {activeTab === 'sessions' && <SessionsTab />}
-          {activeTab === 'organizations' && <OrganizationsTab />}
-          {activeTab === 'audit' && <AuditLogTab />}
+          {activeTab === 'users' && <UsersTab lockedCount={stats?.locked_users} isSuperAdmin={isSuperAdmin} />}
+          {activeTab === 'sessions' && <SessionsTab isSuperAdmin={isSuperAdmin} />}
+          {activeTab === 'organizations' && <OrganizationsTab isSuperAdmin={isSuperAdmin} />}
+          {activeTab === 'audit' && <AuditLogTab isSuperAdmin={isSuperAdmin} />}
           {activeTab === 'self-settings' && <AdminSelfSettingsTab session={session} />}
         </div>
 
@@ -1736,11 +2166,13 @@ export default function AdminDashboard({ session, onBack }) {
           <AlertTriangle size={16} style={{ flexShrink: 0 }} />
           <span>
             Gösterilen veriler şu an <strong>demo/mock</strong> modunda çalışmaktadır.
-            Backend admin endpoint'leri hazır olduğunda <code style={{ fontSize: '0.75rem' }}>adminService.js</code> dosyasında
-            {' '}<code style={{ fontSize: '0.75rem' }}>MOCK_MODE = false</code> yapılması yeterlidir.
+            Backend {isSuperAdmin ? 'superadmin' : 'admin'} endpoint'leri hazır olduğunda{' '}
+            <code style={{ fontSize: '0.75rem' }}>{isSuperAdmin ? 'superadminService.js' : 'adminService.js'}</code>{' '}
+            dosyasında <code style={{ fontSize: '0.75rem' }}>MOCK_MODE = false</code> yapılması yeterlidir.
           </span>
         </div>
       </main>
     </div>
   );
 }
+
