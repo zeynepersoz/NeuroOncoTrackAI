@@ -12,6 +12,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 import heroImage from './assets/login-workstation.png';
 import {
@@ -33,6 +34,7 @@ import {
   resetPassword,
   register,
 } from './services/authService.js';
+import { setAccessToken } from './services/apiClient.js';
 
 const activityEvents = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
 
@@ -564,12 +566,14 @@ function RegisterScreen({ onSuccess, onBack }) {
             <label className="field-group">
               <span>Ad</span>
               <div className="input-shell">
+                <User size={18} />
                 <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} placeholder="Adınız" />
               </div>
             </label>
             <label className="field-group">
               <span>Soyad</span>
               <div className="input-shell">
+                <User size={18} />
                 <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} placeholder="Soyadınız" />
               </div>
             </label>
@@ -718,13 +722,43 @@ function App() {
   const [rememberStation, setRememberStation] = useState(true);
   const [status, setStatus] = useState(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('neuro_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.expiresAt > Date.now()) {
+          if (parsed.accessToken) {
+            setAccessToken(parsed.accessToken);
+          }
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  });
   const [authLoading, setAuthLoading] = useState(false);
   const [idleWarning, setIdleWarning] = useState(false);
   const idleTimersRef = useRef({ warning: null, logout: null });
 
   // Ekran durumu: 'welcome' | 'login' | 'mfa' | 'change-password' | 'forgot-password' | 'register'
-  const [screen, setScreen] = useState('welcome');
+  const [screen, setScreen] = useState(() => {
+    try {
+      const savedSession = window.localStorage.getItem('neuro_session');
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        if (parsed && parsed.expiresAt > Date.now()) {
+          const savedScreen = window.localStorage.getItem('neuro_screen');
+          return savedScreen || 'workspace';
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'welcome';
+  });
   const [mfaState, setMfaState] = useState(null);
 
   // Giriş sekmesi: 'kurum' | 'bireysel'
@@ -734,6 +768,21 @@ function App() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem('neuro-login-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (session) {
+      window.localStorage.setItem('neuro_session', JSON.stringify(session));
+    } else {
+      window.localStorage.removeItem('neuro_session');
+      window.localStorage.removeItem('neuro_screen');
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session) {
+      window.localStorage.setItem('neuro_screen', screen);
+    }
+  }, [screen, session]);
 
   useEffect(() => {
     // Admin ekranında workspace overflow:hidden kaldırılır, scroll çalışsın
