@@ -23,7 +23,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 _HERE = Path(__file__).resolve().parent
 _MODELS = _HERE / "finetuned_models"
 
-CLASS_NAMES = ["glioma", "meningioma", "notumor"]
+CLASS_NAMES = ["glioma", "meningioma", "notumor", "pituitary"]
 W_RF = 0.70
 W_HGB = 0.30
 
@@ -52,14 +52,14 @@ def _load_cnn():
 def _load_rf():
     global _RF
     if _RF is None:
-        _RF = joblib.load(_MODELS / "rf_brats_v2.pkl")
+        _RF = joblib.load(_MODELS / "rf_kaggle4.pkl")
     return _RF
 
 
 def _load_hgb():
     global _HGB
     if _HGB is None:
-        _HGB = joblib.load(_MODELS / "hgb_brats_v2.pkl")
+        _HGB = joblib.load(_MODELS / "hgb_kaggle4.pkl")
     return _HGB
 
 
@@ -122,14 +122,14 @@ def predict_v3_multislice(slices: list, apply_domain_preproc: bool = True) -> di
 
 def get_v3_info() -> dict:
     info = {
-        "model_id": "v3_rf_hgb_expanded_cache",
-        "components": ["MobileNetV2 (ImageNet)", "RandomForest (v2)", "HistGradientBoosting (v2)"],
+        "model_id": "v3_rf_hgb_kaggle4",
+        "components": ["MobileNetV2 (ImageNet)", "RandomForest (Kaggle 4-sınıf)", "HistGradientBoosting (Kaggle 4-sınıf)"],
         "ensemble_weights": {"rf": W_RF, "hgb": W_HGB},
         "class_names": CLASS_NAMES,
         "input_shape": [128, 128, 3],
-        "cache_version": "v2 (1310 slice, 1010 case, 530 yeni glioma)",
+        "cache_version": "kaggle-4class (glioma/meningioma/notumor/pituitary)",
     }
-    p = _MODELS / "v2_finetune_metrics.json"
+    p = _MODELS / "metrics_kaggle.json"
     if p.exists():
         with open(p) as f:
             info["metrics"] = json.load(f)
