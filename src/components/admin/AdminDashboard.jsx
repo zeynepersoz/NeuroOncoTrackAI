@@ -73,6 +73,7 @@ import {
   getSuperAdminSecurityOrganizations,
 } from '../../services/superadminService.js';
 import { changePassword, getMe, updateMe } from '../../services/authService.js';
+import { MfaTabContent, SessionsTabContent } from '../user/UserModals.jsx';
 
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
 
@@ -1939,6 +1940,21 @@ function AdminSelfSettingsTab({ session }) {
           {passwordSaving ? 'Değiştiriliyor...' : 'Parolayı Güncelle'}
         </button>
       </form>
+
+      {/* MFA Ayarları */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', borderLeft: '1px solid var(--line)', paddingLeft: '2rem' }}>
+        <div>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--ink)', margin: '0 0 0.25rem 0' }}>
+            İki Faktörlü Doğrulama (MFA)
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>
+            Ekstra güvenlik için hesabınıza 2 adımlı doğrulama ekleyin
+          </p>
+        </div>
+        <div style={{ margin: '-1.5rem 0 0 -1.5rem' }}>
+          <MfaTabContent session={session} onProfileUpdate={() => {}} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1957,13 +1973,17 @@ export default function AdminDashboard({ session, onBack, theme, setTheme }) {
     fetchStats.then(setStats).finally(() => setStatsLoading(false));
   }, [isSuperAdmin]);
 
-  const tabs = [
+  const allTabs = [
     { id: 'users', label: 'Kullanıcılar', icon: Users, badge: stats?.locked_users || null },
     { id: 'sessions', label: 'Sistem Oturumları', icon: Monitor },
     { id: 'organizations', label: 'Kurumlar', icon: Building2 },
     { id: 'audit', label: 'Audit Log', icon: Shield },
     { id: 'self-settings', label: 'Profil & Güvenlik Ayarlarım', icon: User },
   ];
+
+  const tabs = isSuperAdmin
+    ? allTabs
+    : allTabs.filter(t => ['users', 'self-settings'].includes(t.id));
 
   // Rozet rengi ve etiketi role göre
   const roleBadgeStyle = isSuperAdmin

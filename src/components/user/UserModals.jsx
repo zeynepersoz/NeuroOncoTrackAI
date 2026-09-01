@@ -1287,7 +1287,7 @@ function PasswordTabContent({ onClose }) {
   );
 }
 
-function SessionsTabContent({ onClose }) {
+export function SessionsTabContent({ onClose }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState('');
@@ -1427,7 +1427,7 @@ function SessionsTabContent({ onClose }) {
   );
 }
 
-function MfaTabContent({ session, onClose, onProfileUpdate }) {
+export function MfaTabContent({ session, onClose, onProfileUpdate }) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [step, setStep] = useState('initial'); // 'initial', 'setup', 'disable'
