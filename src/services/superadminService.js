@@ -104,8 +104,22 @@ async function callSuperAdmin(path, options = {}) {
 // ─── İstatistikler (tüm kurumlar) ─────────────────────────────────────────────
 
 export async function getSuperAdminStats() {
-  const data = await callSuperAdmin('/admin/stats');
-  return data ?? MOCK_SUPER_STATS;
+  const data = await callSuperAdmin('/admin/security/overview');
+  if (data) {
+    return {
+      total_users: data.users.total,
+      active_users: data.users.active,
+      locked_users: data.users.locked,
+      inactive_users: data.users.inactive,
+      mfa_enabled_count: data.users.mfa_enabled,
+      mfa_adoption_rate: data.users.mfa_adoption_rate,
+      active_sessions: data.sessions.active,
+      total_organizations: data.organizations.total,
+      new_users_last_30d: 0,
+      failed_logins_last_24h: data.security_events.failed_logins,
+    };
+  }
+  return MOCK_SUPER_STATS;
 }
 
 // ─── Kullanıcı Yönetimi (tüm kurumlar) ────────────────────────────────────────
@@ -117,9 +131,13 @@ export async function getSuperAdminUsers({
   status = '',
   organizationId = '',
 } = {}) {
-  const params = new URLSearchParams({ page, search, role, status });
-  if (organizationId) params.set('organization_id', organizationId);
-  const data = await callSuperAdmin(`/admin/users?${params}`);
+  const params = new URLSearchParams({ page, page_size: 50 });
+  if (search) params.append('search', search);
+  if (role) params.append('role', role);
+  if (status) params.append('status', status);
+  if (organizationId) params.append('organization_id', organizationId);
+  
+  const data = await callSuperAdmin(`/admin/users?${params.toString()}`);
   if (data) return data;
 
   // Mock filtrele

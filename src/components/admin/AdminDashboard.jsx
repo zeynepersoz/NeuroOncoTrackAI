@@ -839,7 +839,10 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
       } else {
         data = await getAdminUsers({ search, role: roleFilter, status: statusFilter });
       }
-      setUsers(data.users || []);
+      setUsers(data?.users || []);
+    } catch (err) {
+      console.error('Kullanıcılar yüklenirken hata oluştu:', err);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -1139,7 +1142,10 @@ function SessionsTab({ isSuperAdmin }) {
       const data = isSuperAdmin
         ? await getSuperAdminSessions()
         : await getAdminSessions();
-      setSessions(data.sessions || []);
+      setSessions(data?.sessions || []);
+    } catch (err) {
+      console.error('Oturumlar yüklenirken hata oluştu:', err);
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -1270,7 +1276,10 @@ function OrganizationsTab({ isSuperAdmin }) {
       const data = isSuperAdmin
         ? await getSuperAdminOrganizations()
         : await getAdminOrganizations();
-      setOrgs(data.organizations || []);
+      setOrgs(data?.organizations || []);
+    } catch (err) {
+      console.error('Kurumlar yüklenirken hata oluştu:', err);
+      setOrgs([]);
     } finally {
       setLoading(false);
     }
@@ -1414,7 +1423,10 @@ function AuditLogTab({ isSuperAdmin }) {
       const data = isSuperAdmin
         ? await getSuperAdminAuditLog({ severity })
         : await getAdminAuditLog({ severity });
-      setLogs(data.logs || []);
+      setLogs(data?.logs || []);
+    } catch (err) {
+      console.error('Audit logları yüklenirken hata oluştu:', err);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
@@ -1974,7 +1986,13 @@ export default function AdminDashboard({ session, onBack, theme, setTheme }) {
   useEffect(() => {
     setStatsLoading(true);
     const fetchStats = isSuperAdmin ? getSuperAdminStats() : getAdminStats();
-    fetchStats.then(setStats).finally(() => setStatsLoading(false));
+    fetchStats
+      .then(setStats)
+      .catch((err) => {
+        console.error('Stats fetch error:', err);
+        setStats(null);
+      })
+      .finally(() => setStatsLoading(false));
   }, [isSuperAdmin]);
 
   const allTabs = [

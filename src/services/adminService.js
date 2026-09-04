@@ -117,7 +117,12 @@ export async function getAdminStats() {
 
 // ─── Kullanıcı Yönetimi ───────────────────────────────────────────────────────
 
-export async function getAdminUsers(page = 1, search = '', role = '', status = '') {
+export async function getAdminUsers({
+  page = 1,
+  search = '',
+  role = '',
+  status = '',
+} = {}) {
   const params = new URLSearchParams({ page, page_size: 50 });
   if (search) params.append('search', search);
   if (role) params.append('role', role);
