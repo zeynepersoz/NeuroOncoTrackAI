@@ -257,7 +257,9 @@ export function ProfileModal({ session, onClose, onProfileUpdate }) {
 
   const u = profile || session?.user || {};
   const ROLE_LABELS = {
-    ADMIN: 'Yönetici', PHYSICIAN: 'Hekim', RADIOLOGIST: 'Radyolog',
+    SUPERADMIN: 'Süper Yönetici', SUPER_ADMIN: 'Süper Yönetici',
+    ADMIN: 'Yönetici', HOSPITAL_ADMIN: 'Yönetici',
+    PHYSICIAN: 'Hekim', RADIOLOGIST: 'Radyolog',
     RESEARCHER: 'Araştırmacı', VIEWER: 'Gözlemci',
   };
 
@@ -991,7 +993,9 @@ function ProfileTabContent({ session, onClose, onProfileUpdate }) {
 
   const u = profile || session?.user || {};
   const ROLE_LABELS = {
-    ADMIN: 'Yönetici', PHYSICIAN: 'Hekim', RADIOLOGIST: 'Radyolog',
+    SUPERADMIN: 'Süper Yönetici', SUPER_ADMIN: 'Süper Yönetici',
+    ADMIN: 'Yönetici', HOSPITAL_ADMIN: 'Yönetici',
+    PHYSICIAN: 'Hekim', RADIOLOGIST: 'Radyolog',
     RESEARCHER: 'Araştırmacı', VIEWER: 'Gözlemci',
   };
 

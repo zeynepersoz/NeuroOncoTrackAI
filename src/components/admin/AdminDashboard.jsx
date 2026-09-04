@@ -99,7 +99,9 @@ function formatDate(iso) {
 
 const ROLE_LABELS = {
   SUPERADMIN: 'Süper Yönetici',
+  SUPER_ADMIN: 'Süper Yönetici',
   ADMIN: 'Yönetici',
+  HOSPITAL_ADMIN: 'Yönetici',
   PHYSICIAN: 'Hekim',
   RADIOLOGIST: 'Radyolog',
   RESEARCHER: 'Araştırmacı',
@@ -108,7 +110,9 @@ const ROLE_LABELS = {
 
 const ROLE_COLORS = {
   SUPERADMIN: '#9333ea',       /* purple */
+  SUPER_ADMIN: '#9333ea',
   ADMIN: 'var(--rose)',
+  HOSPITAL_ADMIN: 'var(--rose)',
   PHYSICIAN: 'var(--teal)',
   RADIOLOGIST: 'var(--cyan)',
   RESEARCHER: 'var(--amber)',
@@ -1962,7 +1966,7 @@ function AdminSelfSettingsTab({ session }) {
 // ─── Ana Admin Dashboard ──────────────────────────────────────────────────────
 
 export default function AdminDashboard({ session, onBack, theme, setTheme }) {
-  const isSuperAdmin = session?.user?.role === 'SUPERADMIN';
+  const isSuperAdmin = ['SUPERADMIN', 'SUPER_ADMIN'].includes(session?.user?.role);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('users');

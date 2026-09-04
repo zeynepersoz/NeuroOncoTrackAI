@@ -960,7 +960,7 @@ function App() {
           theme={theme}
           setTheme={setTheme}
           onLogout={handleLogout}
-          onOpenAdmin={['ADMIN', 'SUPERADMIN'].includes(session?.user?.role) ? () => setScreen('admin') : undefined}
+          onOpenAdmin={['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(session?.user?.role) ? () => setScreen('admin') : undefined}
         />
         {idleWarning ? (
           <div className="session-warning" role="status">

@@ -1562,9 +1562,9 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             userInitial={userInitial}
             sessionModeLabel={sessionModeLabel}
             onLogout={onLogout}
-            isAdmin={['ADMIN', 'SUPERADMIN'].includes(session?.user?.role)}
+            isAdmin={['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(session?.user?.role)}
             onOpenSettings={() => {
-              if (['ADMIN', 'SUPERADMIN'].includes(session?.user?.role) && onOpenAdmin) {
+              if (['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(session?.user?.role) && onOpenAdmin) {
                 onOpenAdmin();
               } else {
                 setActiveUserModal('settings');
