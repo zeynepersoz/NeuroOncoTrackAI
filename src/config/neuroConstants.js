@@ -64,7 +64,7 @@ export const DEFAULT_CLINICAL_USER = {
   id: 'clinical-demo-user',
   name: 'Sistem Yöneticisi',
   title: 'Demo Admin Kullanıcısı',
-  role: 'ADMIN',
+  role: 'HOSPITAL_ADMIN',
   email: 'admin@neurooncotrack.ai',
   institutionCode: 'NOT-2026',
   organization: 'NeuroOncoTrack Klinik Çalışma Alanı',
