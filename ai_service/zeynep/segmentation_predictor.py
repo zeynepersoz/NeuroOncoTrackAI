@@ -151,11 +151,84 @@ def segment_slice(img_2d: np.ndarray) -> dict:
     }
 
 
+# ─── nnU-Net 3D (birincil, Dice 0.807) — model varsa kullanılır ───────────────
+# Model klasörü git'e giremeyecek kadar büyük (checkpoint ~123MB); lokal/harici
+# dağıtılır. Yoksa otomatik 2D U-Net'e (Dice 0.75) düşülür.
+_NNUNET_DIR = _HERE / "finetuned_models" / "nnunet_men" / "nnUNetTrainer__nnUNetPlans__3d_fullres"
+_NNUNET = None
+_NNUNET_TRIED = False
+
+
+def _load_nnunet():
+    """nnUNetPredictor'ı lazy yükle. nnunetv2 yoksa veya model yoksa None döner."""
+    global _NNUNET, _NNUNET_TRIED
+    if _NNUNET_TRIED:
+        return _NNUNET
+    _NNUNET_TRIED = True
+    ckpt = _NNUNET_DIR / "fold_0" / "checkpoint_best.pth"
+    if not ckpt.exists():
+        return None
+    try:
+        import os
+        import torch
+        # nnU-Net 3D çıkarımı CPU'da pratik değil (~dk/vaka). Yalnız CUDA'da kullan;
+        # aksi halde None → hızlı 2D U-Net fallback. NNUNET_FORCE_CPU=1 ile zorlanabilir.
+        if not torch.cuda.is_available() and os.environ.get("NNUNET_FORCE_CPU") != "1":
+            return None
+        from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
+        dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        pred = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=True,
+                               perform_everything_on_device=(dev.type == "cuda"), device=dev)
+        pred.initialize_from_trained_model_folder(str(_NNUNET_DIR), use_folds=(0,),
+                                                  checkpoint_name="checkpoint_best.pth")
+        _NNUNET = pred
+    except Exception as exc:  # pragma: no cover
+        print(f"[seg] nnU-Net yüklenemedi, 2D'ye düşülüyor: {exc}")
+        _NNUNET = None
+    return _NNUNET
+
+
+def _segment_nifti_nnunet(t1c_path: str):
+    """nnU-Net 3D ile segmentasyon + gerçek hacim. Başarısızsa None (2D'ye düş)."""
+    pred = _load_nnunet()
+    if pred is None:
+        return None
+    try:
+        import time as _t
+        from nnunetv2.imageio.simpleitk_reader_writer import SimpleITKIO
+        t0 = _t.perf_counter()
+        img, props = SimpleITKIO().read_images([str(t1c_path)])
+        seg = pred.predict_single_npy_array(img, props, None, None, False)
+        seg = _postprocess_3d((seg > 0).astype(np.uint8), keep_largest=True)
+        spacing = props["spacing"]  # mm; sıra fark etmez (hacim = çarpım)
+        voxel_cm3 = float(np.prod(spacing)) / 1000.0
+        tumor_voxels = int(seg.sum())
+        ax = int(np.argmin(seg.shape))  # en ince eksen ≈ aksiyel dilim ekseni
+        per = seg.sum(axis=tuple(i for i in range(seg.ndim) if i != ax))
+        return {
+            "volume_cm3": round(tumor_voxels * voxel_cm3, 2),
+            "tumor_voxels": tumor_voxels,
+            "voxel_cm3": round(voxel_cm3, 6),
+            "num_tumor_slices": int((per > 0).sum()),
+            "num_slices": int(seg.shape[ax]),
+            "best_slice": int(per.argmax()) if per.max() > 0 else int(seg.shape[ax] // 2),
+            "mask_shape": list(seg.shape),
+            "engine": "nnunet_3d_fullres (Dice~0.81)",
+            "latency_ms": (_t.perf_counter() - t0) * 1000.0,
+        }
+    except Exception as exc:  # pragma: no cover
+        print(f"[seg] nnU-Net çıkarımı başarısız, 2D'ye düşülüyor: {exc}")
+        return None
+
+
 def segment_nifti(t1c_path: str) -> dict:
     """
     Tam T1c NIfTI'den 3B GTV → GERÇEK tümör hacmi (voksel sayısı × voksel hacmi).
-    Üründeki 'Hacim (cm³)' değerini demo yerine bu üretir.
+    Öncelik: nnU-Net 3D (Dice~0.81). Yoksa 2D U-Net (Dice~0.75) fallback.
     """
+    _nn = _segment_nifti_nnunet(t1c_path)
+    if _nn is not None:
+        return _nn
     import nibabel as nib
     t0 = time.perf_counter()
     nii = nib.load(str(t1c_path))
@@ -180,25 +253,26 @@ def segment_nifti(t1c_path: str) -> dict:
         "num_slices": int(Z),
         "best_slice": best_slice,
         "mask_shape": list(masks.shape),
+        "engine": "2d_unet_fallback (Dice~0.75)",
         "latency_ms": (time.perf_counter() - t0) * 1000.0,
     }
 
 
 def get_segmentation_info() -> dict:
-    info = {
+    nnunet_ready = (_NNUNET_DIR / "fold_0" / "checkpoint_best.pth").exists()
+    active = "nnunet_3d_fullres" if _load_nnunet() is not None else "2d_unet_fallback"
+    return {
         "task": "meningioma_gtv_segmentation",
-        "arch": "2D U-Net (16-32-64-128)",
         "modality": "T1c",
         "trained_on": "BraTS-MEN-RT (500 hasta)",
-        "model_available": _MODEL_PATH.exists(),
+        "engines": {
+            "primary": "nnU-Net 3D full-res (Dice~0.81)",
+            "fallback": "2D U-Net 16-32-64-128 (Dice~0.75)",
+        },
+        "nnunet_model_available": nnunet_ready,
+        "active_engine": active,  # CUDA yoksa fallback (CPU'da 3D pratik değil)
+        "unet2d_available": _MODEL_PATH.exists(),
     }
-    try:
-        _load_model()
-        info["input_size"] = _SIZE
-        info["device"] = str(_DEVICE)
-    except Exception as exc:  # pragma: no cover
-        info["error"] = str(exc)
-    return info
 
 
 if __name__ == "__main__":

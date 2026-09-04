@@ -40,3 +40,5 @@ processed/
 quarantine/
 **/processed/
 **/quarantine/
+# nnU-Net segmentasyon modeli (>100MB, harici dağıtılır)
+ai_service/zeynep/finetuned_models/nnunet_men/
