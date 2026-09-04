@@ -45,7 +45,7 @@ const ADMIN_ORG_ID = 'o1';
 const ADMIN_ORG_NAME = 'NeuroOncoTrack Merkezi';
 
 let MOCK_USERS = [
-  { id: 'a1', email: 'admin@neuroonco.ai', first_name: 'Sistem', last_name: 'Yöneticisi', role: 'ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: ADMIN_ORG_ID, organization_name: ADMIN_ORG_NAME, last_login_at: new Date(Date.now() - 1 * 3600000).toISOString(), created_at: '2026-01-15T10:00:00Z', failed_login_attempts: 0 },
+  { id: 'a1', email: 'admin@neuroonco.ai', first_name: 'Sistem', last_name: 'Yöneticisi', role: 'HOSPITAL_ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: ADMIN_ORG_ID, organization_name: ADMIN_ORG_NAME, last_login_at: new Date(Date.now() - 1 * 3600000).toISOString(), created_at: '2026-01-15T10:00:00Z', failed_login_attempts: 0 },
   { id: 'a2', email: 'drcelik@neuroonco.ai', first_name: 'Ayşe', last_name: 'Çelik', title: 'Prof. Dr.', role: 'RADIOLOGIST', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: ADMIN_ORG_ID, organization_name: ADMIN_ORG_NAME, last_login_at: new Date(Date.now() - 2 * 3600000).toISOString(), created_at: '2026-02-10T09:00:00Z', failed_login_attempts: 0 },
   { id: 'a3', email: 'drdemir@neuroonco.ai', first_name: 'Mehmet', last_name: 'Demir', title: 'Doç. Dr.', role: 'PHYSICIAN', is_active: true, is_locked: false, mfa_enabled: false, must_change_password: false, organization_id: ADMIN_ORG_ID, organization_name: ADMIN_ORG_NAME, last_login_at: new Date(Date.now() - 5 * 3600000).toISOString(), created_at: '2026-02-20T11:00:00Z', failed_login_attempts: 1 },
   { id: 'a4', email: 'dryilmaz@neuroonco.ai', first_name: 'Fatma', last_name: 'Yılmaz', title: 'Dr.', role: 'PHYSICIAN', is_active: true, is_locked: true, mfa_enabled: false, must_change_password: false, organization_id: ADMIN_ORG_ID, organization_name: ADMIN_ORG_NAME, last_login_at: new Date(Date.now() - 48 * 3600000).toISOString(), created_at: '2026-03-01T08:00:00Z', failed_login_attempts: 5 },
@@ -234,7 +234,8 @@ export async function deactivateAdminOrganization(orgId) {
 // ─── Audit Log (kendi kurumu) ─────────────────────────────────────────────────
 
 export async function getAdminAuditLog({ page = 1, severity = '' } = {}) {
-  const data = await callAdmin(`/admin/audit-logs?page=${page}&severity=${severity}`);
+  const url = severity ? `/admin/audit-logs?page=${page}&severity=${encodeURIComponent(severity)}` : `/admin/audit-logs?page=${page}`;
+  const data = await callAdmin(url);
   if (data) return data;
   const logs = severity ? MOCK_AUDIT_LOG.filter(l => l.severity === severity) : MOCK_AUDIT_LOG;
   return { logs, total: logs.length };
@@ -259,3 +260,4 @@ export async function getAdminSecurityOrganizations() {
   if (data) return data;
   return { organizations: [] };
 }
+

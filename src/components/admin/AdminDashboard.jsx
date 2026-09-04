@@ -305,7 +305,7 @@ function SelectFilter({ value, onChange, options, placeholder }) {
 
 // ─── Kullanıcı Düzenleme Modalı ──────────────────────────────────────────────
 
-function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout }) {
+function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuperAdmin }) {
   const [formData, setFormData] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
@@ -502,7 +502,8 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout }) {
                 <option value="PHYSICIAN">Hekim (PHYSICIAN)</option>
                 <option value="RADIOLOGIST">Radyolog (RADIOLOGIST)</option>
                 <option value="RESEARCHER">Araştırmacı (RESEARCHER)</option>
-                <option value="ADMIN">Yönetici (ADMIN)</option>
+                <option value="HOSPITAL_ADMIN">Yönetici (HOSPITAL_ADMIN)</option>
+                {isSuperAdmin && <option value="SUPER_ADMIN">Süper Yönetici (SUPER_ADMIN)</option>}
                 <option value="VIEWER">Gözlemci (VIEWER)</option>
               </select>
             </div>
@@ -959,8 +960,8 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
             onChange={setRoleFilter}
             placeholder="Tüm roller"
             options={[
-              ...(isSuperAdmin ? [{ value: 'SUPERADMIN', label: 'Süper Yönetici' }] : []),
-              { value: 'ADMIN', label: 'Yönetici' },
+              ...(isSuperAdmin ? [{ value: 'SUPER_ADMIN', label: 'Süper Yönetici' }] : []),
+              { value: 'HOSPITAL_ADMIN', label: 'Yönetici' },
               { value: 'PHYSICIAN', label: 'Hekim' },
               { value: 'RADIOLOGIST', label: 'Radyolog' },
               { value: 'RESEARCHER', label: 'Araştırmacı' },

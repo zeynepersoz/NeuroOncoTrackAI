@@ -36,13 +36,13 @@ export const MOCK_ALL_ORGANIZATIONS = [
 
 export const MOCK_ALL_USERS = [
   // NeuroOncoTrack Merkezi (o1)
-  { id: '1', email: 'superadmin@neuroonco.ai', first_name: 'Süper', last_name: 'Yönetici', role: 'SUPERADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o1', organization_name: 'NeuroOncoTrack Merkezi', last_login_at: new Date(Date.now() - 30 * 60000).toISOString(), created_at: '2026-01-01T00:00:00Z', failed_login_attempts: 0 },
-  { id: '2', email: 'admin@neuroonco.ai', first_name: 'Sistem', last_name: 'Yöneticisi', role: 'ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o1', organization_name: 'NeuroOncoTrack Merkezi', last_login_at: new Date(Date.now() - 1 * 3600000).toISOString(), created_at: '2026-01-15T10:00:00Z', failed_login_attempts: 0 },
+  { id: '1', email: 'superadmin@neuroonco.ai', first_name: 'Süper', last_name: 'Yönetici', role: 'SUPER_ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o1', organization_name: 'NeuroOncoTrack Merkezi', last_login_at: new Date(Date.now() - 30 * 60000).toISOString(), created_at: '2026-01-01T00:00:00Z', failed_login_attempts: 0 },
+  { id: '2', email: 'admin@neuroonco.ai', first_name: 'Sistem', last_name: 'Yöneticisi', role: 'HOSPITAL_ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o1', organization_name: 'NeuroOncoTrack Merkezi', last_login_at: new Date(Date.now() - 1 * 3600000).toISOString(), created_at: '2026-01-15T10:00:00Z', failed_login_attempts: 0 },
   { id: '3', email: 'researcher1@neuroonco.ai', first_name: 'Kadir', last_name: 'Doğan', title: 'Dr.', role: 'RESEARCHER', is_active: true, is_locked: false, mfa_enabled: false, must_change_password: false, organization_id: 'o1', organization_name: 'NeuroOncoTrack Merkezi', last_login_at: new Date(Date.now() - 4 * 3600000).toISOString(), created_at: '2026-01-20T09:00:00Z', failed_login_attempts: 0 },
   // Hacettepe (o2)
   { id: '4', email: 'drcelik@hacettepe.edu.tr', first_name: 'Ayşe', last_name: 'Çelik', title: 'Prof. Dr.', role: 'RADIOLOGIST', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o2', organization_name: 'Hacettepe Üniversitesi Tıp Fakültesi', last_login_at: new Date(Date.now() - 2 * 3600000).toISOString(), created_at: '2026-02-10T09:00:00Z', failed_login_attempts: 0 },
   { id: '5', email: 'drkorkmaz@hacettepe.edu.tr', first_name: 'Tarık', last_name: 'Korkmaz', title: 'Doç. Dr.', role: 'PHYSICIAN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o2', organization_name: 'Hacettepe Üniversitesi Tıp Fakültesi', last_login_at: new Date(Date.now() - 6 * 3600000).toISOString(), created_at: '2026-02-15T10:00:00Z', failed_login_attempts: 0 },
-  { id: '6', email: 'admin.hacettepe@hacettepe.edu.tr', first_name: 'Hacettepe', last_name: 'Admin', role: 'ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o2', organization_name: 'Hacettepe Üniversitesi Tıp Fakültesi', last_login_at: new Date(Date.now() - 5 * 3600000).toISOString(), created_at: '2026-01-20T00:00:00Z', failed_login_attempts: 0 },
+  { id: '6', email: 'admin.hacettepe@hacettepe.edu.tr', first_name: 'Hacettepe', last_name: 'Admin', role: 'HOSPITAL_ADMIN', is_active: true, is_locked: false, mfa_enabled: true, must_change_password: false, organization_id: 'o2', organization_name: 'Hacettepe Üniversitesi Tıp Fakültesi', last_login_at: new Date(Date.now() - 5 * 3600000).toISOString(), created_at: '2026-01-20T00:00:00Z', failed_login_attempts: 0 },
   // Gazi (o3)
   { id: '7', email: 'drdemir@gazi.edu.tr', first_name: 'Mehmet', last_name: 'Demir', title: 'Doç. Dr.', role: 'PHYSICIAN', is_active: true, is_locked: false, mfa_enabled: false, must_change_password: false, organization_id: 'o3', organization_name: 'Gazi Üniversitesi Hastanesi', last_login_at: new Date(Date.now() - 5 * 3600000).toISOString(), created_at: '2026-02-20T11:00:00Z', failed_login_attempts: 1 },
   { id: '8', email: 'drsahin@gazi.edu.tr', first_name: 'Elif', last_name: 'Şahin', title: 'Uz. Dr.', role: 'RADIOLOGIST', is_active: true, is_locked: false, mfa_enabled: false, must_change_password: false, organization_id: 'o3', organization_name: 'Gazi Üniversitesi Hastanesi', last_login_at: new Date(Date.now() - 24 * 3600000).toISOString(), created_at: '2026-03-01T09:00:00Z', failed_login_attempts: 0 },
@@ -205,7 +205,8 @@ export async function forceLogoutSuperAdminUser(userId) {
 // ─── Organizasyon Yönetimi ────────────────────────────────────────────────────
 
 export async function getSuperAdminOrganizations({ search = '' } = {}) {
-  const data = await callSuperAdmin(`/admin/organizations?search=${search}`);
+  const url = search ? `/admin/organizations?search=${encodeURIComponent(search)}` : '/admin/organizations';
+  const data = await callSuperAdmin(url);
   if (data) return data;
   let orgs = [...MOCK_ALL_ORGANIZATIONS];
   if (search) {
@@ -291,9 +292,10 @@ export async function revokeSuperAdminSession(userId, sessionId) {
 // ─── Denetim Kayıtları (Audit Log) ────────────────────────────────────────────
 
 export async function getSuperAdminAuditLog({ page = 1, severity = '', organizationId = '' } = {}) {
-  const params = new URLSearchParams({ page, severity });
-  if (organizationId) params.set('organization_id', organizationId);
-  const data = await callSuperAdmin(`/admin/audit-log?${params}`);
+  const params = new URLSearchParams({ page });
+  if (severity) params.append('severity', severity);
+  if (organizationId) params.append('organization_id', organizationId);
+  const data = await callSuperAdmin(`/admin/audit-logs?${params.toString()}`);
   if (data) return data;
   let logs = [...MOCK_SUPER_AUDIT];
   if (severity) logs = logs.filter(l => l.severity === severity);
@@ -317,4 +319,5 @@ export async function getSuperAdminSecurityOrganizations() {
   if (data) return data;
   return { organizations: [] };
 }
+
 
