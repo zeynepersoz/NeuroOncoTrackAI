@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# SIRLAR — asla commit edilmez
+.env
+.env.local
+*.pem
+keys/
+test_keys/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Loglar / çıktı artefaktları
+*.log
+*.tmp
+outputs/
+uploads/
+_quarantine/
+_out/
+_batch_out/
+_eval_out/
+_test_out/
+result.json
+
+# Büyük modeller (repo dışı — Release/Drive'dan indirilir)
+ai_service/zeynep/finetuned_models/nnunet_men/
+ai_service/finetuned_models_kaggle/*.pkl
+ai_service/finetuned_models_kaggle/*.npz
+ai_service/data/kaggle/
+
+# Veritabanı
+*.db
+*.sqlite3

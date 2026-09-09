@@ -1,0 +1,31 @@
+{
+  "test_accuracy": 0.8846153846153846,
+  "test_balanced_accuracy": 0.8740740740740741,
+  "test_macro_f1": 0.8738108070071671,
+  "cv_ensemble_mean": 0.9422838709677419,
+  "cv_ensemble_std": 0.012932070984090853,
+  "confusion_matrix": [
+    [
+      29,
+      5,
+      2
+    ],
+    [
+      6,
+      49,
+      5
+    ],
+    [
+      0,
+      0,
+      60
+    ]
+  ],
+  "class_names": [
+    "glioma",
+    "meningioma",
+    "notumor"
+  ],
+  "n_train": 624,
+  "n_test": 156
+}

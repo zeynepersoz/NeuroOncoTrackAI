@@ -1,0 +1,19 @@
+Diffüz astrositik tümörler IDH mutasyon durumuna göre sınıflandırılır. IDH-mutant astrositomlar genellikle daha iyi prognoza sahiptir.
+
+Glioblastom (WHO Grade IV) en agresif primer beyin tümörüdür. Medyan sağkalım 14-16 aydır. Tedavi cerrahi rezeksiyon, radyoterapi ve temozolomid kemoterapisinden oluşur.
+
+MGMT promoter metilasyonu, temozolomid kemoterapisine yanıtın güçlü bir prediktörüdür. MGMT metile hastalarda medyan sağkalım metile olmayanlara göre anlamlı ölçüde uzundur.
+
+Tümör segmentasyonunda enhancing tumor (ET), whole tumor (WT) ve tumor core (TC) olmak üzere üç alt bölge değerlendirilir.
+
+ET/WT oranının yüksek olması aktif tümör yükünün fazla olduğuna işaret eder ve kötü prognozla ilişkilendirilmiştir.
+
+IDH wildtype diffüz astrositik tümörler, TERT promoter mutasyonu, EGFR amplifikasyonu veya kromozom 7 kazanımı/10 kaybı varlığında glioblastom olarak sınıflandırılır.
+
+Nörogörüntülemede T1 kontrastlı sekans tümörün kontrast tutan bölgesini, FLAIR sekansı ise peritümöral ödemi gösterir.
+
+Radyomik özellikler (tekstür, şekil, yoğunluk dağılımı) tümör heterojenitesini nicel olarak değerlendirmek için kullanılır ve moleküler alt tiplerin noninvaziv tahmininde umut vaat etmektedir.
+
+Yapay zeka destekli radyoloji raporları klinik karar destek aracı olarak değerlendirilmeli, kesin tanı yerine geçmemelidir.
+
+Pediatrik hastalarda diffüz orta hat gliomu H3 K27-altered, ayrı bir tümör tipi olarak sınıflandırılır ve prognozu kötüdür.

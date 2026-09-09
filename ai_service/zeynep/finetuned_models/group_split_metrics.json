@@ -1,0 +1,93 @@
+{
+  "method": "StratifiedGroupKFold",
+  "n_total_slices": 780,
+  "n_unique_cases": 480,
+  "n_multi_slice_cases": 300,
+  "cv_accuracy_mean": 0.9371794871794872,
+  "cv_accuracy_std": 0.01590983800768059,
+  "cv_balanced_accuracy_mean": 0.9292592592592592,
+  "cv_balanced_accuracy_std": 0.017348205079452384,
+  "cv_macro_f1_mean": 0.9312955482073418,
+  "cv_macro_f1_std": 0.018009538965225422,
+  "oof_accuracy": 0.9371794871794872,
+  "oof_balanced_accuracy": 0.9292592592592591,
+  "oof_macro_f1": 0.9315090492386547,
+  "confusion_matrix_oof": [
+    [
+      158,
+      18,
+      4
+    ],
+    [
+      14,
+      276,
+      10
+    ],
+    [
+      0,
+      3,
+      297
+    ]
+  ],
+  "class_names": [
+    "glioma",
+    "meningioma",
+    "notumor"
+  ],
+  "fold_metrics": [
+    {
+      "fold": 1,
+      "n_test": 156,
+      "n_test_cases": 96,
+      "acc": 0.9166666666666666,
+      "bacc": 0.9055555555555556,
+      "f1_macro": 0.9077299591241635,
+      "train_time_s": 49.250964916
+    },
+    {
+      "fold": 2,
+      "n_test": 156,
+      "n_test_cases": 96,
+      "acc": 0.9294871794871795,
+      "bacc": 0.912962962962963,
+      "f1_macro": 0.9185431161711995,
+      "train_time_s": 50.721216500000004
+    },
+    {
+      "fold": 3,
+      "n_test": 156,
+      "n_test_cases": 96,
+      "acc": 0.9615384615384616,
+      "bacc": 0.9518518518518518,
+      "f1_macro": 0.9584879708787365,
+      "train_time_s": 50.419596833000014
+    },
+    {
+      "fold": 4,
+      "n_test": 156,
+      "n_test_cases": 96,
+      "acc": 0.9487179487179487,
+      "bacc": 0.9407407407407407,
+      "f1_macro": 0.9436906469905035,
+      "train_time_s": 50.780520833
+    },
+    {
+      "fold": 5,
+      "n_test": 156,
+      "n_test_cases": 96,
+      "acc": 0.9294871794871795,
+      "bacc": 0.9351851851851852,
+      "f1_macro": 0.9280260478721057,
+      "train_time_s": 50.76258116700001
+    }
+  ],
+  "comparison_vs_stratified": {
+    "stratified_acc": 0.8846,
+    "stratified_bacc": 0.8741,
+    "stratified_f1": 0.8738,
+    "delta_acc": 0.05257948717948713,
+    "delta_bacc": 0.05515925925925924,
+    "delta_f1": 0.05749554820734182,
+    "verdict": "IHMAL ED\u0130LEB\u0130L\u0130R S\u0130ZINTI (fark < 0.03)"
+  }
+}

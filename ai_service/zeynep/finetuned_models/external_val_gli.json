@@ -1,0 +1,521 @@
+{
+  "n_evaluated": 530,
+  "n_failed": 0,
+  "glioma_recall": 0.6773584905660377,
+  "predictions_distribution": {
+    "glioma": 359,
+    "meningioma": 162,
+    "notumor": 9
+  },
+  "confidence_stats": {
+    "mean": 0.7344518889546374,
+    "median": 0.7413600246353599,
+    "min": 0.4501531746595729,
+    "max": 0.9847748170138724,
+    "geq_090": 35,
+    "geq_080": 173
+  },
+  "verdict": "BEKLENT\u0130DEN D\u00dc\u015e\u00dcK \u2717",
+  "per_case": [
+    {
+      "case": "BraTS-GLI-00005-100",
+      "pred": "meningioma",
+      "conf": 0.5741990701685906,
+      "probs": {
+        "glioma": 0.3781296009806886,
+        "meningioma": 0.5741990701685906,
+        "notumor": 0.04767132885072079
+      }
+    },
+    {
+      "case": "BraTS-GLI-00005-101",
+      "pred": "glioma",
+      "conf": 0.5357664270521337,
+      "probs": {
+        "glioma": 0.5357664270521337,
+        "meningioma": 0.384706509524589,
+        "notumor": 0.0795270634232773
+      }
+    },
+    {
+      "case": "BraTS-GLI-00006-100",
+      "pred": "glioma",
+      "conf": 0.9262920884559037,
+      "probs": {
+        "glioma": 0.9262920884559037,
+        "meningioma": 0.06710074378718997,
+        "notumor": 0.006607167756906315
+      }
+    },
+    {
+      "case": "BraTS-GLI-00006-101",
+      "pred": "glioma",
+      "conf": 0.8831750798042037,
+      "probs": {
+        "glioma": 0.8831750798042037,
+        "meningioma": 0.1117158179944909,
+        "notumor": 0.005109102201305421
+      }
+    },
+    {
+      "case": "BraTS-GLI-00008-100",
+      "pred": "glioma",
+      "conf": 0.6717224973741962,
+      "probs": {
+        "glioma": 0.6717224973741962,
+        "meningioma": 0.297694277124053,
+        "notumor": 0.030583225501750848
+      }
+    },
+    {
+      "case": "BraTS-GLI-00008-101",
+      "pred": "glioma",
+      "conf": 0.7351201366219616,
+      "probs": {
+        "glioma": 0.7351201366219616,
+        "meningioma": 0.2566169448872495,
+        "notumor": 0.008262918490788872
+      }
+    },
+    {
+      "case": "BraTS-GLI-00008-102",
+      "pred": "meningioma",
+      "conf": 0.6221320650979041,
+      "probs": {
+        "glioma": 0.30373925898779447,
+        "meningioma": 0.6221320650979041,
+        "notumor": 0.07412867591430135
+      }
+    },
+    {
+      "case": "BraTS-GLI-00008-103",
+      "pred": "meningioma",
+      "conf": 0.5814493502212643,
+      "probs": {
+        "glioma": 0.36317476044296865,
+        "meningioma": 0.5814493502212643,
+        "notumor": 0.05537588933576706
+      }
+    },
+    {
+      "case": "BraTS-GLI-00009-100",
+      "pred": "glioma",
+      "conf": 0.7656300227182578,
+      "probs": {
+        "glioma": 0.7656300227182578,
+        "meningioma": 0.20609015284231308,
+        "notumor": 0.028279824439429096
+      }
+    },
+    {
+      "case": "BraTS-GLI-00009-101",
+      "pred": "glioma",
+      "conf": 0.8982141055684092,
+      "probs": {
+        "glioma": 0.8982141055684092,
+        "meningioma": 0.08940233200015545,
+        "notumor": 0.012383562431435308
+      }
+    },
+    {
+      "case": "BraTS-GLI-00020-100",
+      "pred": "glioma",
+      "conf": 0.6052177660605044,
+      "probs": {
+        "glioma": 0.6052177660605044,
+        "meningioma": 0.2846953659105852,
+        "notumor": 0.11008686802891031
+      }
+    },
+    {
+      "case": "BraTS-GLI-00020-101",
+      "pred": "glioma",
+      "conf": 0.6630651178617797,
+      "probs": {
+        "glioma": 0.6630651178617797,
+        "meningioma": 0.2666426776871838,
+        "notumor": 0.07029220445103668
+      }
+    },
+    {
+      "case": "BraTS-GLI-00027-100",
+      "pred": "glioma",
+      "conf": 0.6826270105577572,
+      "probs": {
+        "glioma": 0.6826270105577572,
+        "meningioma": 0.2870121976189355,
+        "notumor": 0.030360791823307327
+      }
+    },
+    {
+      "case": "BraTS-GLI-00027-101",
+      "pred": "glioma",
+      "conf": 0.762994896086334,
+      "probs": {
+        "glioma": 0.762994896086334,
+        "meningioma": 0.21807372723484403,
+        "notumor": 0.01893137667882204
+      }
+    },
+    {
+      "case": "BraTS-GLI-00033-100",
+      "pred": "glioma",
+      "conf": 0.7488034238105166,
+      "probs": {
+        "glioma": 0.7488034238105166,
+        "meningioma": 0.24106892345770922,
+        "notumor": 0.010127652731774172
+      }
+    },
+    {
+      "case": "BraTS-GLI-00033-101",
+      "pred": "glioma",
+      "conf": 0.7547267192955756,
+      "probs": {
+        "glioma": 0.7547267192955756,
+        "meningioma": 0.23814401732811863,
+        "notumor": 0.007129263376305831
+      }
+    },
+    {
+      "case": "BraTS-GLI-00046-100",
+      "pred": "meningioma",
+      "conf": 0.7063298476886926,
+      "probs": {
+        "glioma": 0.2202341070288612,
+        "meningioma": 0.7063298476886926,
+        "notumor": 0.07343604528244624
+      }
+    },
+    {
+      "case": "BraTS-GLI-00046-101",
+      "pred": "meningioma",
+      "conf": 0.7941666011793361,
+      "probs": {
+        "glioma": 0.19182542562112137,
+        "meningioma": 0.7941666011793361,
+        "notumor": 0.014007973199542601
+      }
+    },
+    {
+      "case": "BraTS-GLI-00060-100",
+      "pred": "glioma",
+      "conf": 0.7249720656186166,
+      "probs": {
+        "glioma": 0.7249720656186166,
+        "meningioma": 0.22894340152712578,
+        "notumor": 0.046084532854257634
+      }
+    },
+    {
+      "case": "BraTS-GLI-00060-101",
+      "pred": "glioma",
+      "conf": 0.67439810324747,
+      "probs": {
+        "glioma": 0.67439810324747,
+        "meningioma": 0.28232962660320965,
+        "notumor": 0.043272270149320335
+      }
+    },
+    {
+      "case": "BraTS-GLI-00063-100",
+      "pred": "glioma",
+      "conf": 0.6331188418980348,
+      "probs": {
+        "glioma": 0.6331188418980348,
+        "meningioma": 0.35600818360386033,
+        "notumor": 0.010872974498105033
+      }
+    },
+    {
+      "case": "BraTS-GLI-00063-101",
+      "pred": "meningioma",
+      "conf": 0.5636771971361383,
+      "probs": {
+        "glioma": 0.4283825015334339,
+        "meningioma": 0.5636771971361383,
+        "notumor": 0.007940301330427738
+      }
+    },
+    {
+      "case": "BraTS-GLI-00078-100",
+      "pred": "glioma",
+      "conf": 0.8781261288723704,
+      "probs": {
+        "glioma": 0.8781261288723704,
+        "meningioma": 0.11679342370572522,
+        "notumor": 0.005080447421904352
+      }
+    },
+    {
+      "case": "BraTS-GLI-00078-101",
+      "pred": "glioma",
+      "conf": 0.82991428334817,
+      "probs": {
+        "glioma": 0.82991428334817,
+        "meningioma": 0.1524704262035861,
+        "notumor": 0.01761529044824394
+      }
+    },
+    {
+      "case": "BraTS-GLI-00080-100",
+      "pred": "glioma",
+      "conf": 0.8822777052649019,
+      "probs": {
+        "glioma": 0.8822777052649019,
+        "meningioma": 0.11380806715098658,
+        "notumor": 0.003914227584111518
+      }
+    },
+    {
+      "case": "BraTS-GLI-00080-101",
+      "pred": "glioma",
+      "conf": 0.6869056221362344,
+      "probs": {
+        "glioma": 0.6869056221362344,
+        "meningioma": 0.30664312967242086,
+        "notumor": 0.006451248191344758
+      }
+    },
+    {
+      "case": "BraTS-GLI-00085-100",
+      "pred": "glioma",
+      "conf": 0.7189825950960906,
+      "probs": {
+        "glioma": 0.7189825950960906,
+        "meningioma": 0.2687180984017326,
+        "notumor": 0.012299306502176777
+      }
+    },
+    {
+      "case": "BraTS-GLI-00085-101",
+      "pred": "glioma",
+      "conf": 0.7300736697473895,
+      "probs": {
+        "glioma": 0.7300736697473895,
+        "meningioma": 0.2627507399726301,
+        "notumor": 0.007175590279980461
+      }
+    },
+    {
+      "case": "BraTS-GLI-00096-100",
+      "pred": "glioma",
+      "conf": 0.7858480961051417,
+      "probs": {
+        "glioma": 0.7858480961051417,
+        "meningioma": 0.2078978991876786,
+        "notumor": 0.006254004707179695
+      }
+    },
+    {
+      "case": "BraTS-GLI-00096-101",
+      "pred": "glioma",
+      "conf": 0.5977269143473031,
+      "probs": {
+        "glioma": 0.5977269143473031,
+        "meningioma": 0.396830899336987,
+        "notumor": 0.005442186315709971
+      }
+    },
+    {
+      "case": "BraTS-GLI-00463-100",
+      "pred": "meningioma",
+      "conf": 0.6254932459565546,
+      "probs": {
+        "glioma": 0.35487534123052356,
+        "meningioma": 0.6254932459565546,
+        "notumor": 0.01963141281292181
+      }
+    },
+    {
+      "case": "BraTS-GLI-00463-101",
+      "pred": "glioma",
+      "conf": 0.8627129039681433,
+      "probs": {
+        "glioma": 0.8627129039681433,
+        "meningioma": 0.13412211167877852,
+        "notumor": 0.0031649843530782355
+      }
+    },
+    {
+      "case": "BraTS-GLI-00469-100",
+      "pred": "meningioma",
+      "conf": 0.6692836470879258,
+      "probs": {
+        "glioma": 0.31049871045868893,
+        "meningioma": 0.6692836470879258,
+        "notumor": 0.020217642453385313
+      }
+    },
+    {
+      "case": "BraTS-GLI-00469-101",
+      "pred": "meningioma",
+      "conf": 0.5288350444373755,
+      "probs": {
+        "glioma": 0.4332070040817465,
+        "meningioma": 0.5288350444373755,
+        "notumor": 0.03795795148087803
+      }
+    },
+    {
+      "case": "BraTS-GLI-00472-100",
+      "pred": "meningioma",
+      "conf": 0.7384201661172505,
+      "probs": {
+        "glioma": 0.19775018945975392,
+        "meningioma": 0.7384201661172505,
+        "notumor": 0.06382964442299557
+      }
+    },
+    {
+      "case": "BraTS-GLI-00472-101",
+      "pred": "meningioma",
+      "conf": 0.7392043074339044,
+      "probs": {
+        "glioma": 0.24012453423610394,
+        "meningioma": 0.7392043074339044,
+        "notumor": 0.02067115832999163
+      }
+    },
+    {
+      "case": "BraTS-GLI-00483-100",
+      "pred": "glioma",
+      "conf": 0.8698874686072517,
+      "probs": {
+        "glioma": 0.8698874686072517,
+        "meningioma": 0.12455949666185537,
+        "notumor": 0.00555303473089296
+      }
+    },
+    {
+      "case": "BraTS-GLI-00483-101",
+      "pred": "glioma",
+      "conf": 0.6977174748170902,
+      "probs": {
+        "glioma": 0.6977174748170902,
+        "meningioma": 0.2831368400612341,
+        "notumor": 0.01914568512167571
+      }
+    },
+    {
+      "case": "BraTS-GLI-00485-100",
+      "pred": "glioma",
+      "conf": 0.7217461900000635,
+      "probs": {
+        "glioma": 0.7217461900000635,
+        "meningioma": 0.26489855648637645,
+        "notumor": 0.013355253513560195
+      }
+    },
+    {
+      "case": "BraTS-GLI-00485-101",
+      "pred": "glioma",
+      "conf": 0.6104090443549429,
+      "probs": {
+        "glioma": 0.6104090443549429,
+        "meningioma": 0.3797164448355209,
+        "notumor": 0.009874510809536318
+      }
+    },
+    {
+      "case": "BraTS-GLI-00491-100",
+      "pred": "glioma",
+      "conf": 0.7167665367749818,
+      "probs": {
+        "glioma": 0.7167665367749818,
+        "meningioma": 0.2707404280452446,
+        "notumor": 0.012493035179773621
+      }
+    },
+    {
+      "case": "BraTS-GLI-00491-101",
+      "pred": "glioma",
+      "conf": 0.6707476141003484,
+      "probs": {
+        "glioma": 0.6707476141003484,
+        "meningioma": 0.30777000038143265,
+        "notumor": 0.021482385518218926
+      }
+    },
+    {
+      "case": "BraTS-GLI-00498-100",
+      "pred": "meningioma",
+      "conf": 0.7582662636043614,
+      "probs": {
+        "glioma": 0.1835547717459567,
+        "meningioma": 0.7582662636043614,
+        "notumor": 0.0581789646496819
+      }
+    },
+    {
+      "case": "BraTS-GLI-00498-101",
+      "pred": "meningioma",
+      "conf": 0.5411332364903033,
+      "probs": {
+        "glioma": 0.38683872207576925,
+        "meningioma": 0.5411332364903033,
+        "notumor": 0.07202804143392752
+      }
+    },
+    {
+      "case": "BraTS-GLI-00505-100",
+      "pred": "glioma",
+      "conf": 0.8005951370384995,
+      "probs": {
+        "glioma": 0.8005951370384995,
+        "meningioma": 0.19075070164303418,
+        "notumor": 0.008654161318466413
+      }
+    },
+    {
+      "case": "BraTS-GLI-00505-101",
+      "pred": "meningioma",
+      "conf": 0.505589782848734,
+      "probs": {
+        "glioma": 0.4892885653288618,
+        "meningioma": 0.505589782848734,
+        "notumor": 0.005121651822404157
+      }
+    },
+    {
+      "case": "BraTS-GLI-00506-100",
+      "pred": "glioma",
+      "conf": 0.7255533540600082,
+      "probs": {
+        "glioma": 0.7255533540600082,
+        "meningioma": 0.2574536576163328,
+        "notumor": 0.0169929883236589
+      }
+    },
+    {
+      "case": "BraTS-GLI-00506-101",
+      "pred": "glioma",
+      "conf": 0.8680305893856278,
+      "probs": {
+        "glioma": 0.8680305893856278,
+        "meningioma": 0.12808355088980033,
+        "notumor": 0.003885859724571868
+      }
+    },
+    {
+      "case": "BraTS-GLI-00507-100",
+      "pred": "glioma",
+      "conf": 0.5343736505071248,
+      "probs": {
+        "glioma": 0.5343736505071248,
+        "meningioma": 0.45678676943556823,
+        "notumor": 0.008839580057306893
+      }
+    },
+    {
+      "case": "BraTS-GLI-00507-101",
+      "pred": "meningioma",
+      "conf": 0.6963488339786595,
+      "probs": {
+        "glioma": 0.28250599196775833,
+        "meningioma": 0.6963488339786595,
+        "notumor": 0.02114517405358221
+      }
+    }
+  ]
+}

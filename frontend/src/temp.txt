@@ -1,0 +1,37 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Activity,
+  CheckCircle,
+  Cpu,
+  Database,
+  KeyRound,
+  Lock,
+  Mail,
+  RefreshCw,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
+import heroImage from "./assets/login-workstation.png";
+import {
+  capabilities,
+  IDLE_WARNING_MINUTES,
+  loginMetrics,
+  REAL_SESSION_MINUTES,
+} from "./config/neuroConstants.js";
+import ThemeToggle from "./components/common/ThemeToggle.jsx";
+import ProductWorkspace from "./components/workspace/ProductWorkspace.jsx";
+import AdminDashboard from "./components/admin/AdminDashboard.jsx";
+import { getInitialTheme } from "./utils/neuroUtils.js";
+import {
+  changePassword,
+  forgotPassword,
+  login,
+  logout,
+  mfaVerify,
+  resetPassword,
+  register,
+} from "./services/authService.js";
+
+const activityEvents = ["pointerdown", "keydown", "wheel", "touchstart"];
+
