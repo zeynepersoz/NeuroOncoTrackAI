@@ -3,11 +3,10 @@ app/api/ai_gateway.py — Backend ↔ AI servisleri köprüsü (AI uçları TEK 
 ================================================================================
 Backend'e AI için eklenen tüm uçlar burada toplanır (kök /api/analyze,
 /api/library, /api/report). Ağır iş AI servislerinde; burada model yok.
-- 2D referans vakalar (jpg) → :8100 /classify + /report; görüntü images.original.
+- 2D referans vakalar (jpg) → :8100 /classify_viz (sınıflandırma + ön işleme + saliency).
 - 3D referans vakalar (NIfTI) → pod GPU /segment_viz (tünel :8200) → gerçek hacim +
   kesit + tümör overlay.
-Not: Yusufcan'ın /api/v1 klinik router'ları olgunlaşınca bu uçlar oraya taşınabilir;
-şimdilik entegre demo için tek gateway dosyası.
+Not: Yusufcan'ın /api/v1 klinik router'ları olgunlaşınca bu uçlar oraya taşınabilir.
 
 Env:
     AI_SERVICE_URL   (vars. http://127.0.0.1:8100)  — sınıflandırma + rapor
@@ -79,11 +78,12 @@ async def case_library():
 
 
 async def _classify_bytes(data: bytes, filename: str) -> dict:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        r = await client.post(f"{AI_BASE}/classify",
+    """/classify_viz → sınıflandırma + ön işleme adımları + saliency görselleri."""
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        r = await client.post(f"{AI_BASE}/classify_viz",
                               files={"file": (filename or "image.jpg", data, "application/octet-stream")})
     if r.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"AI /classify hatası: {r.text[:200]}")
+        raise HTTPException(status_code=502, detail=f"AI /classify_viz hatası: {r.text[:200]}")
     return r.json()
 
 
@@ -144,6 +144,8 @@ async def analyze(file: UploadFile | None = File(default=None),
             nii = f.read()
         viz = await _segment_viz(nii, os.path.basename(path))
         vol = viz.get("volume_cm3")
+        # eşdeğer küre çapı (sezgisel — cm³ "büyük" gelmesin): d = 2·(3V/4π)^(1/3)
+        diam = round(2 * (3 * vol / (4 * 3.14159265)) ** (1 / 3), 1) if vol else None
         model_output = {"prediction": "meningioma", "prediction_tr": "Menenjiyom",
                         "tumor_volume_cm3": vol}
         report = await _report(model_output)
@@ -152,16 +154,17 @@ async def analyze(file: UploadFile | None = File(default=None),
             "prediction": "meningioma", "diagnosis_tr": "Menenjiyom (GTV)",
             "confidence": None, "probs": {},
             "model_id": viz.get("engine", "nnunet_3d_fullres"),
-            "volume": vol, "tumor_volume_cm3": vol,
+            "volume": vol, "tumor_volume_cm3": vol, "equiv_diameter_cm": diam,
             "features": {"tumor_voxels": viz.get("tumor_voxels"),
-                         "num_tumor_slices": viz.get("num_tumor_slices")},
+                         "num_tumor_slices": viz.get("num_tumor_slices"),
+                         "equiv_diameter_cm": diam},
             "molecular": {},
             "report": payload.get("report"), "sections": payload.get("sections", {}),
             "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
             "fhir": payload.get("fhir", {}),
             "images": viz.get("images", {}),
             "image_name": os.path.basename(path),
-            "note": f"3D nnU-Net segmentasyonu (GPU) — gerçek tümör hacmi {vol} cm³.",
+            "note": f"3D nnU-Net segmentasyonu (GPU) — tümör hacmi {vol} cm³ (≈ {diam} cm eşdeğer çap).",
         }
 
     # ── 2D jpg ──────────────────────────────────────────────────────────
@@ -181,10 +184,11 @@ async def analyze(file: UploadFile | None = File(default=None),
                     "confidence": classification.get("confidence"),
                     "probabilities": classification.get("probabilities", {})}
     report = await _report(model_output)
-    # görüntüyü çalışma alanında göster. 2D sınıflandırmada segmentasyon maskesi yok;
-    # overlay/normalized'ı da orijinalle doldur ki viewer (varsayılan Overlay modu) MRI'yı göstersin.
-    b = _b64(data)
-    images = {"original": b, "overlay": b, "normalized": b}
+    # /classify_viz zaten ön işleme adımları + saliency görsellerini döndürür.
+    images = classification.get("images") or {}
+    if not images:  # güvenli yedek — en azından orijinali göster
+        b = _b64(data)
+        images = {"original": b, "overlay": b, "normalized": b}
     return _legacy_shape(classification, report, name, images=images)
 
 

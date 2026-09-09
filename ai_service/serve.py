@@ -199,6 +199,30 @@ async def _classify(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"classify_error: {exc}")
 
 
+@app.post("/classify_viz")
+async def _classify_viz(file: UploadFile = File(...)):
+    """2D görüntü → sınıflandırma + ön işleme adımları + occlusion saliency ısı haritası.
+
+    Dönen images: original, stripped, corrected, normalized, gradcam, overlay (base64 JPEG).
+    Referans vakalarda çalışma alanı sekmeleri boş kalmasın diye.
+    """
+    import numpy as np
+    import cv2
+    try:
+        from classify_viz import classify_with_viz  # zeynep/ sys.path'te
+    except ModuleNotFoundError:
+        from zeynep.classify_viz import classify_with_viz
+
+    data = await file.read()
+    arr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if arr is None:
+        raise HTTPException(status_code=400, detail="Görüntü çözülemedi.")
+    try:
+        return classify_with_viz(arr)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"classify_viz_error: {exc}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("AI_SERVICE_PORT", "8100"))
