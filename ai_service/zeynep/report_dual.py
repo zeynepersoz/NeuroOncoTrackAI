@@ -180,7 +180,21 @@ def add_second_opinion(
     )
     t0 = time.perf_counter()
     try:
-        raw = _review_raw(provider, reviewer_model, user_msg, groq_api_key)
+        try:
+            raw = _review_raw(provider, reviewer_model, user_msg, groq_api_key)
+        except Exception as exc_primary:
+            # Claude başarısız (ör. workspace-scope hatası) → Groq denetçiye düş,
+            # ki ikinci görüş hiç çalışmamaktansa çalışsın.
+            if provider == "anthropic" and groq_api_key:
+                provider = "groq"
+                reviewer_model = (os.environ.get("GROQ_REVIEWER_MODEL")
+                                  or DEFAULT_GROQ_REVIEWER)
+                meta["reviewer_provider"] = provider
+                meta["reviewer_model"] = reviewer_model
+                meta["fallback_from"] = f"anthropic ({type(exc_primary).__name__})"
+                raw = _review_raw(provider, reviewer_model, user_msg, groq_api_key)
+            else:
+                raise
         parsed = _parse_json(raw)
         review: dict[str, Any] = {**meta, "status": "ok",
                                   "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1)}

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -47,6 +49,39 @@ _TR2EN.update({"gliom": "glioma", "menenjiyom": "meningioma",
 
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
+
+
+# ── Sonuç cache'i (token tasarrufu) ──────────────────────────────────
+# Aynı vaka tekrar seçildiğinde AI'ya (OpenAI + Claude) yeniden gitmez;
+# kaydedilmiş sonucu döner. NEURO_CACHE=0 ile kapatılır.
+CACHE_DIR = Path(os.environ.get("NEURO_CACHE_DIR", "/tmp/neuro_cache"))
+CACHE_ENABLED = os.environ.get("NEURO_CACHE", "1") != "0"
+try:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    CACHE_ENABLED = False
+
+
+def _cache_get(key: str):
+    if not CACHE_ENABLED:
+        return None
+    f = CACHE_DIR / f"{key}.json"
+    if f.exists():
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+
+def _cache_put(key: str, data: dict) -> None:
+    if not CACHE_ENABLED:
+        return
+    try:
+        (CACHE_DIR / f"{key}.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _resolve_library_path(library_id: str) -> Path:
@@ -137,6 +172,10 @@ async def analyze(file: UploadFile | None = File(default=None),
 
     # ── 3D referans vakası ──────────────────────────────────────────────
     if library_id in THREE_D_CASES:
+        key = "3d_" + library_id
+        cached = _cache_get(key)
+        if cached is not None:
+            return {**cached, "cached": True}
         path = THREE_D_CASES[library_id]
         if not os.path.exists(path):
             raise HTTPException(404, "3D vaka dosyası bulunamadı.")
@@ -150,7 +189,7 @@ async def analyze(file: UploadFile | None = File(default=None),
                         "tumor_volume_cm3": vol}
         report = await _report(model_output)
         payload = (report or {}).get("payload", {})
-        return {
+        result = {
             "prediction": "meningioma", "diagnosis_tr": "Menenjiyom (GTV)",
             "confidence": None, "probs": {},
             "model_id": viz.get("engine", "nnunet_3d_fullres"),
@@ -166,17 +205,25 @@ async def analyze(file: UploadFile | None = File(default=None),
             "image_name": os.path.basename(path),
             "note": f"3D nnU-Net segmentasyonu (GPU) — tümör hacmi {vol} cm³ (≈ {diam} cm eşdeğer çap).",
         }
+        _cache_put(key, result)
+        return result
 
     # ── 2D jpg ──────────────────────────────────────────────────────────
     if file is not None:
         data = await file.read()
         name = file.filename or "upload.jpg"
+        key = "up_" + hashlib.sha256(data).hexdigest()[:16]
     elif library_id:
         p = _resolve_library_path(library_id)
         data = p.read_bytes()
         name = p.name
+        key = "lib_" + os.path.basename(library_id)
     else:
         raise HTTPException(status_code=400, detail="file veya library_id gerekli.")
+
+    cached = _cache_get(key)
+    if cached is not None:
+        return {**cached, "cached": True}
 
     classification = await _classify_bytes(data, name)
     model_output = {"prediction": classification.get("prediction"),
@@ -189,7 +236,9 @@ async def analyze(file: UploadFile | None = File(default=None),
     if not images:  # güvenli yedek — en azından orijinali göster
         b = _b64(data)
         images = {"original": b, "overlay": b, "normalized": b}
-    return _legacy_shape(classification, report, name, images=images)
+    result = _legacy_shape(classification, report, name, images=images)
+    _cache_put(key, result)
+    return result
 
 
 @router.post("/api/report")
