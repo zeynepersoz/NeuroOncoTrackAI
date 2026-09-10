@@ -1,26 +1,21 @@
 """
-zeynep/report_dual.py — Çift-LLM rapor doğrulama (ikinci görüş)
+zeynep/report_dual.py — Çift-LLM rapor doğrulama (ikinci görüş / bağımsız denetçi)
 ================================================================================
-Zeynep bölümü. Mert'in RAG pipeline'ına (LLM-A: taslak yazar) DOKUNMADAN,
-bağımsız ikinci bir LLM (LLM-B: doğrulayıcı / ikinci görüş) ekler.
+Zeynep bölümü. Taslağı yazan LLM-A'ya (RAG pipeline) DOKUNMADAN, bağımsız ikinci
+bir LLM (LLM-B: denetçi) ekler. Denetçi FARKLI sağlayıcı olabilir — farklı sağlayıcı
+halüsinasyonu yakalamada daha güçlüdür (generator ↔ critic).
 
-Akış:
-    1) LLM-A (varsayılan openai/gpt-oss-120b)  → RAG raporu taslağı  (bridge/serve üretir)
-    2) LLM-B (varsayılan openai/gpt-oss-20b)   → bağımsız klinik doğrulama:
-         - taslak, model çıktısındaki GERÇEKLERLE (tanı, güven, hacim, olasılıklar)
-           tutarlı mı?
-         - halüsinasyon / dayanaksız iddia var mı?
-         - kısa bağımsız ikinci görüş + güvenlik bayrakları
-
-İki farklı model kullanmak, tek modele göre halüsinasyonu yakalamada daha güçlüdür
-(generator ↔ critic deseni). Her iki model de Groq üzerinden çalışır; sağlayıcı/model
-env ile değiştirilebilir (sonradan OpenAI/Gemini/Anthropic'e taşımak kolay).
+Denetçi sağlayıcısı (öncelik):
+    1) REVIEWER_PROVIDER env  ("anthropic" | "groq")
+    2) otomatik: ANTHROPIC_API_KEY varsa → anthropic (Claude), yoksa → groq
 
 Env:
-    GROQ_API_KEY            zorunlu (yoksa ikinci görüş atlanır, taslak aynen döner)
-    GROQ_MODEL              LLM-A (bilgi amaçlı; taslağı serve/bridge üretir)
-    GROQ_REVIEWER_MODEL     LLM-B (varsayılan openai/gpt-oss-20b)
-    DUAL_LLM                "0" ise devre dışı (serve.py kontrol eder)
+    ANTHROPIC_API_KEY        Claude denetçi için
+    ANTHROPIC_REVIEWER_MODEL Claude modeli (vars. claude-sonnet-5)
+    GROQ_API_KEY             Groq denetçi (yedek) için
+    GROQ_REVIEWER_MODEL      Groq modeli (vars. openai/gpt-oss-20b)
+    GROQ_MODEL               LLM-A/taslak modeli (bilgi amaçlı)
+    DUAL_LLM                 "0" ise devre dışı (serve.py kontrol eder)
 
 Dış API:
     add_second_opinion(model_output, draft_payload, groq_api_key=None,
@@ -34,7 +29,8 @@ import re
 import time
 from typing import Any, Optional
 
-DEFAULT_REVIEWER_MODEL = "openai/gpt-oss-20b"
+DEFAULT_GROQ_REVIEWER = "openai/gpt-oss-20b"
+DEFAULT_ANTHROPIC_REVIEWER = "claude-sonnet-5"
 
 _REVIEWER_SYSTEM = (
     "Sen bir nöro-onkoloji uzmanı gibi davranan BAĞIMSIZ bir klinik rapor "
@@ -82,75 +78,104 @@ def _parse_json(text: str) -> Optional[dict]:
         return None
 
 
+def _reviewer_config(reviewer_model: Optional[str]) -> tuple[str, str]:
+    """Sağlayıcı ve model seç. ANTHROPIC_API_KEY varsa Claude, yoksa Groq."""
+    provider = (os.environ.get("REVIEWER_PROVIDER") or "").strip().lower()
+    if provider not in ("anthropic", "groq"):
+        provider = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "groq"
+    if provider == "anthropic":
+        model = (reviewer_model or os.environ.get("ANTHROPIC_REVIEWER_MODEL")
+                 or DEFAULT_ANTHROPIC_REVIEWER)
+    else:
+        model = (reviewer_model or os.environ.get("GROQ_REVIEWER_MODEL")
+                 or DEFAULT_GROQ_REVIEWER)
+    return provider, model
+
+
+def _review_raw(provider: str, model: str, user_msg: str,
+                groq_api_key: Optional[str]) -> str:
+    """Denetçi LLM'i çağır, ham metin döndür. Sağlayıcıya göre SDK seçer."""
+    if provider == "anthropic":
+        from anthropic import Anthropic  # type: ignore
+        client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        # Not: Sonnet 5 temperature/top_p KABUL ETMEZ (400) — göndermiyoruz.
+        # Thinking adaptif (varsayılan); yalnız text bloklarını topla.
+        resp = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=_REVIEWER_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        if getattr(resp, "stop_reason", None) == "refusal":
+            return ""
+        parts = [getattr(b, "text", "") for b in (resp.content or [])
+                 if getattr(b, "type", None) == "text"]
+        return "".join(parts)
+
+    # groq (yedek / varsayılan)
+    from groq import Groq  # type: ignore
+    client = Groq(api_key=groq_api_key)
+    messages = [{"role": "system", "content": _REVIEWER_SYSTEM},
+                {"role": "user", "content": user_msg}]
+    # gpt-oss "reasoning"e token harcayıp content'i boş bırakabiliyor → zorla.
+    try:
+        resp = client.chat.completions.create(
+            model=model, messages=messages, temperature=0.1,
+            max_completion_tokens=2048, reasoning_effort="low",
+            response_format={"type": "json_object"})
+    except Exception:
+        resp = client.chat.completions.create(
+            model=model, messages=messages, temperature=0.1,
+            max_completion_tokens=2048)
+    return resp.choices[0].message.content or ""
+
+
 def add_second_opinion(
     model_output: dict,
     draft_payload: dict,
     groq_api_key: Optional[str] = None,
     reviewer_model: Optional[str] = None,
 ) -> dict:
-    """LLM-A taslağına LLM-B'nin bağımsız doğrulamasını ekler.
+    """LLM-A taslağına bağımsız denetçinin (LLM-B) doğrulamasını ekler.
 
     draft_payload: bridge.generate_report_only(...) çıktısı (içinde .payload.report).
     Dönüş: aynı payload + 'dual_llm' bloğu. Hata/anahtar yoksa taslak aynen döner
     (servis asla çökmemeli — ikinci görüş 'en iyi çaba').
     """
     groq_api_key = groq_api_key or os.environ.get("GROQ_API_KEY")
-    reviewer_model = (
-        reviewer_model
-        or os.environ.get("GROQ_REVIEWER_MODEL")
-        or DEFAULT_REVIEWER_MODEL
-    )
+    provider, reviewer_model = _reviewer_config(reviewer_model)
 
-    # draft_payload StageResult.asdict() → {"status","payload":{...},...}
     payload = draft_payload.get("payload") if isinstance(draft_payload, dict) else None
     draft_report = ""
     if isinstance(payload, dict):
         draft_report = payload.get("report") or ""
 
     meta = {
+        "reviewer_provider": provider,
         "reviewer_model": reviewer_model,
         "drafter_model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
     }
 
-    if not groq_api_key:
+    have_key = (bool(os.environ.get("ANTHROPIC_API_KEY")) if provider == "anthropic"
+                else bool(groq_api_key))
+    if not have_key:
         _attach(draft_payload, {**meta, "status": "skipped",
-                                "reason": "GROQ_API_KEY yok"})
+                                "reason": f"{provider} API anahtarı yok"})
         return draft_payload
     if not draft_report.strip():
         _attach(draft_payload, {**meta, "status": "skipped",
                                 "reason": "LLM-A taslağı boş — doğrulanacak metin yok"})
         return draft_payload
 
+    user_msg = (
+        "YAPISAL MODEL ÇIKTISI (kesin gerçekler):\n"
+        f"{_facts_block(model_output)}\n\n"
+        "DENETLENECEK TASLAK RAPOR:\n"
+        f"{draft_report}"
+    )
     t0 = time.perf_counter()
     try:
-        from groq import Groq  # type: ignore
-        client = Groq(api_key=groq_api_key)
-        user_msg = (
-            "YAPISAL MODEL ÇIKTISI (kesin gerçekler):\n"
-            f"{_facts_block(model_output)}\n\n"
-            "DENETLENECEK TASLAK RAPOR:\n"
-            f"{draft_report}"
-        )
-        messages = [
-            {"role": "system", "content": _REVIEWER_SYSTEM},
-            {"role": "user", "content": user_msg},
-        ]
-        # gpt-oss modelleri "reasoning" kanalına token harcayıp content'i boş
-        # bırakabiliyor → reasoning_effort=low + json_object ile zorluyoruz.
-        # Bunları desteklemeyen sağlayıcıda (OpenAI/Gemini) sade çağrıya düşer.
-        try:
-            resp = client.chat.completions.create(
-                model=reviewer_model, messages=messages,
-                temperature=0.1, max_completion_tokens=2048,
-                reasoning_effort="low",
-                response_format={"type": "json_object"},
-            )
-        except Exception:
-            resp = client.chat.completions.create(
-                model=reviewer_model, messages=messages,
-                temperature=0.1, max_completion_tokens=2048,
-            )
-        raw = resp.choices[0].message.content or ""
+        raw = _review_raw(provider, reviewer_model, user_msg, groq_api_key)
         parsed = _parse_json(raw)
         review: dict[str, Any] = {**meta, "status": "ok",
                                   "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1)}
@@ -164,9 +189,8 @@ def add_second_opinion(
                 "second_opinion": parsed.get("second_opinion", ""),
             })
         else:
-            # JSON çıkmadıysa ham metni ikinci görüş olarak sakla
-            review.update({"verdict": None, "second_opinion": raw.strip(),
-                           "parse_warning": "JSON ayrıştırılamadı, ham metin döndü"})
+            review.update({"verdict": None, "second_opinion": (raw or "").strip(),
+                           "parse_warning": "JSON ayrıştırılamadı ya da boş yanıt"})
         _attach(draft_payload, review)
     except Exception as exc:  # pragma: no cover
         _attach(draft_payload, {**meta, "status": "error",
@@ -185,15 +209,14 @@ def _attach(draft_payload: dict, dual_block: dict) -> None:
 
 
 if __name__ == "__main__":
-    # Basit elle test: sahte model çıktısı + sahte taslak
     demo_output = {
-        "prediction": "meningioma", "prediction_tr": "menenjiyom",
-        "confidence": 0.94, "tumor_volume_cm3": 32.5,
-        "probabilities": {"glioma": 0.02, "meningioma": 0.94,
-                          "notumor": 0.01, "pituitary": 0.03},
+        "prediction": "meningioma", "prediction_tr": "Menenjiyom",
+        "confidence": 0.94, "tumor_volume_cm3": 17.0,
+        "probabilities": {"glioma": 0.03, "meningioma": 0.94,
+                          "notumor": 0.01, "pituitary": 0.02},
     }
     demo_draft = {"status": "ok", "payload": {"report":
-        "Hastada menenjiyom ile uyumlu, yaklaşık 32.5 cm³ hacimli kitle izlenmektedir. "
-        "Güven düzeyi %94'tür. Kesin tanı için histopatolojik korelasyon önerilir."}}
+        "Hastada menenjiyom ile uyumlu, ~17 cm³ hacimli ekstra-aksiyel kitle izlenmektedir. "
+        "Kesin tanı için histopatolojik korelasyon önerilir."}}
     out = add_second_opinion(demo_output, demo_draft)
-    print(json.dumps(out["dual_llm"], ensure_ascii=False, indent=2))
+    print(json.dumps(out.get("dual_llm"), ensure_ascii=False, indent=2))
