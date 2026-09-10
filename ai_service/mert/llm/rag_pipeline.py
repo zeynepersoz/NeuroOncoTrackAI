@@ -5,7 +5,6 @@ import os
 from typing import Optional
 
 import numpy as np
-from groq import Groq
 
 from .report_validator import validate_report
 from .system_prompt import SYSTEM_PROMPT, format_user_message
@@ -13,9 +12,17 @@ from .vector_store import VectorStore
 
 logger = logging.getLogger("neurooncotrack.llm")
 
-# Groq model adı env ile değiştirilebilir. Erişilebilir modeller hesaba göre değişir;
-# bu hesapta llama-3.3 yok, gpt-oss-120b varsayılan. Değiştirmek için: GROQ_MODEL=...
+# Taslak (LLM-A) modeli. Groq varsayılan; OPENAI_API_KEY varsa OpenAI'ye geçer.
 DEFAULT_GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+DEFAULT_OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+
+
+def _drafter_provider() -> str:
+    """Sağlayıcı seç: DRAFTER_PROVIDER env, yoksa OPENAI_API_KEY varsa openai."""
+    p = (os.environ.get("DRAFTER_PROVIDER") or "").strip().lower()
+    if p in ("openai", "groq"):
+        return p
+    return "openai" if os.environ.get("OPENAI_API_KEY") else "groq"
 
 
 class RAGPipeline:
@@ -27,9 +34,17 @@ class RAGPipeline:
         max_retries: int = 2,
         temperature: float = 0.2,
     ):
-        self.client = Groq(api_key=groq_api_key)
+        self.provider = _drafter_provider()
+        if self.provider == "openai":
+            from openai import OpenAI  # type: ignore
+            self.client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            # bridge, groq model adını geçer; OpenAI'de OPENAI_MODEL kullan.
+            self.model_name = os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+        else:
+            from groq import Groq  # type: ignore
+            self.client = Groq(api_key=groq_api_key)
+            self.model_name = model_name
         self.vector_store = vector_store
-        self.model_name = model_name
         self.max_retries = max_retries
         self.temperature = temperature
 
@@ -40,16 +55,21 @@ class RAGPipeline:
 
     def generate(self, model_output: dict, context_docs: list[str]) -> str:
         user_message = format_user_message(model_output, context_docs)
-
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=self.temperature,
-        )
-
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ]
+        # Bazı yeni OpenAI modelleri (gpt-5.x) sabit temperature ister → önce
+        # temperature ile dene, reddedilirse temperature'sız tekrar dene.
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name, messages=messages,
+                temperature=self.temperature,
+            )
+        except Exception:
+            response = self.client.chat.completions.create(
+                model=self.model_name, messages=messages,
+            )
         return response.choices[0].message.content
 
     def generate_report(

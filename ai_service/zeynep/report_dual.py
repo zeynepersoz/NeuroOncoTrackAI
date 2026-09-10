@@ -150,10 +150,15 @@ def add_second_opinion(
     if isinstance(payload, dict):
         draft_report = payload.get("report") or ""
 
+    _draft_openai = (os.environ.get("DRAFTER_PROVIDER", "").strip().lower() == "openai"
+                     or bool(os.environ.get("OPENAI_API_KEY")))
+    drafter_model = (os.environ.get("OPENAI_MODEL", "gpt-4o") if _draft_openai
+                     else os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"))
     meta = {
         "reviewer_provider": provider,
         "reviewer_model": reviewer_model,
-        "drafter_model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
+        "drafter_provider": "openai" if _draft_openai else "groq",
+        "drafter_model": drafter_model,
     }
 
     have_key = (bool(os.environ.get("ANTHROPIC_API_KEY")) if provider == "anthropic"
