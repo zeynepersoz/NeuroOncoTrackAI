@@ -46,6 +46,16 @@ _TR2EN = {v.lower(): k for k, v in _TR.items()}
 _TR2EN.update({"gliom": "glioma", "menenjiyom": "meningioma",
                "hipofiz": "pituitary", "tümör yok": "notumor", "tumor yok": "notumor"})
 
+# Moleküler durum: bu sürümde IDH/MGMT tahmin modeli YOK. Sahte olasılık üretmiyoruz
+# (tıbben yanıltıcı olur) — dürüst "belirlenmedi" durumu döneriz ki sekme boş kalmasın.
+_MOLECULAR_NA = {
+    "idh_status": "Belirlenmedi — moleküler test önerilir",
+    "idh_mutant_prob": None,
+    "mgmt_status": "Belirlenmedi — moleküler test önerilir",
+    "mgmt_methylated_prob": None,
+    "note": "Bu sürüm görüntüden IDH/MGMT tahmini yapmaz; kesin sonuç histopatoloji/moleküler tetkik ile.",
+}
+
 
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
@@ -147,14 +157,26 @@ def _legacy_shape(classification: dict, report: dict, image_name: str,
     conf_pct = round(conf * 100, 2) if isinstance(conf, (int, float)) else conf
     probs_pct = {k: round(v * 100, 2) for k, v in
                  (classification.get("probabilities") or {}).items()}
+    pred = classification.get("prediction")
+    # en yüksek 2 olasılık farkı → ayırıcı tanı güveni (features için)
+    top = sorted(probs_pct.values(), reverse=True)
+    margin = round(top[0] - top[1], 1) if len(top) >= 2 else None
+    features = {
+        "Sınıflandırıcı": classification.get("model_id", "v3_rf_hgb_kaggle4"),
+        "Ön işleme": "Otsu beyin maskesi + CLAHE + normalize",
+        "Açıklanabilirlik": "Occlusion saliency (ısı haritası)",
+        "Ayırıcı tanı marjı": f"%{margin}" if margin is not None else "-",
+    }
     return {
-        "prediction": classification.get("prediction"),
+        "prediction": pred,
+        "predicted_tumor_type": pred,   # frontend risk/başlık bunu okur
         "diagnosis_tr": classification.get("prediction_tr"),
         "confidence": conf_pct,
         "probs": probs_pct,
         "model_id": classification.get("model_id"),
         "volume": None, "tumor_volume_cm3": None,
-        "features": {}, "molecular": {},
+        "features": features,
+        "molecular": _MOLECULAR_NA,
         "report": payload.get("report"), "sections": payload.get("sections", {}),
         "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
         "fhir": payload.get("fhir", {}),
@@ -190,14 +212,16 @@ async def analyze(file: UploadFile | None = File(default=None),
         report = await _report(model_output)
         payload = (report or {}).get("payload", {})
         result = {
-            "prediction": "meningioma", "diagnosis_tr": "Menenjiyom (GTV)",
+            "prediction": "meningioma", "predicted_tumor_type": "meningioma",
+            "diagnosis_tr": "Menenjiyom (GTV)",
             "confidence": None, "probs": {},
             "model_id": viz.get("engine", "nnunet_3d_fullres"),
             "volume": vol, "tumor_volume_cm3": vol, "equiv_diameter_cm": diam,
-            "features": {"tumor_voxels": viz.get("tumor_voxels"),
-                         "num_tumor_slices": viz.get("num_tumor_slices"),
-                         "equiv_diameter_cm": diam},
-            "molecular": {},
+            "features": {"Tümör voksel": viz.get("tumor_voxels"),
+                         "Tümörlü kesit": viz.get("num_tumor_slices"),
+                         "Eşdeğer çap": f"{diam} cm" if diam else "-",
+                         "Motor": viz.get("engine", "nnU-Net 3D")},
+            "molecular": _MOLECULAR_NA,
             "report": payload.get("report"), "sections": payload.get("sections", {}),
             "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
             "fhir": payload.get("fhir", {}),
