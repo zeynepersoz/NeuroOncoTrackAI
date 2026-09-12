@@ -19,6 +19,7 @@ import base64
 import gzip
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 
@@ -158,14 +159,16 @@ def _legacy_shape(classification: dict, report: dict, image_name: str,
     probs_pct = {k: round(v * 100, 2) for k, v in
                  (classification.get("probabilities") or {}).items()}
     pred = classification.get("prediction")
-    # en yüksek 2 olasılık farkı → ayırıcı tanı güveni (features için)
+    # SAYISAL radyomik/karar metrikleri (frontend feature değerini sayı olarak gösterir)
     top = sorted(probs_pct.values(), reverse=True)
-    margin = round(top[0] - top[1], 1) if len(top) >= 2 else None
+    margin = round(top[0] - top[1], 1) if len(top) >= 2 else 0.0
+    raw = list((classification.get("probabilities") or {}).values())  # 0-1
+    ent = (-sum(p * math.log(p + 1e-9) for p in raw) / math.log(len(raw))) if len(raw) > 1 else 0.0
     features = {
-        "Sınıflandırıcı": classification.get("model_id", "v3_rf_hgb_kaggle4"),
-        "Ön işleme": "Otsu beyin maskesi + CLAHE + normalize",
-        "Açıklanabilirlik": "Occlusion saliency (ısı haritası)",
-        "Ayırıcı tanı marjı": f"%{margin}" if margin is not None else "-",
+        "Güven (%)": conf_pct if isinstance(conf_pct, (int, float)) else 0,
+        "Ayırıcı marj (%)": margin,
+        "Belirsizlik (0-1)": round(ent, 2),
+        "Sınıf sayısı": len(raw) or 4,
     }
     return {
         "prediction": pred,
@@ -217,10 +220,10 @@ async def analyze(file: UploadFile | None = File(default=None),
             "confidence": None, "probs": {},
             "model_id": viz.get("engine", "nnunet_3d_fullres"),
             "volume": vol, "tumor_volume_cm3": vol, "equiv_diameter_cm": diam,
-            "features": {"Tümör voksel": viz.get("tumor_voxels"),
-                         "Tümörlü kesit": viz.get("num_tumor_slices"),
-                         "Eşdeğer çap": f"{diam} cm" if diam else "-",
-                         "Motor": viz.get("engine", "nnU-Net 3D")},
+            "features": {"Hacim (cm³)": vol,
+                         "Eşdeğer çap (cm)": diam,
+                         "Tümör voksel": viz.get("tumor_voxels"),
+                         "Tümörlü kesit": viz.get("num_tumor_slices")},
             "molecular": _MOLECULAR_NA,
             "report": payload.get("report"), "sections": payload.get("sections", {}),
             "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
