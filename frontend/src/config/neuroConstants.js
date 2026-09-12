@@ -90,6 +90,7 @@ export const workspaceTabs = [
   { id: 'xai', label: 'Açıklanabilirlik', icon: Eye, permission: permissions.aiRunXai },
   { id: 'report', label: 'Klinik rapor', icon: FileText, permission: permissions.reportRead },
   { id: 'fhir', label: 'FHIR çıktısı', icon: Database, permission: permissions.fhirRead },
+  { id: 'hospital', label: 'Hastane Vakaları', icon: FlaskConical, permission: permissions.aiViewResult },
 ];
 
 export const moduleLoaderText = {

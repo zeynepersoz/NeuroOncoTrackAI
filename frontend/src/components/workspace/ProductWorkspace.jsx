@@ -72,7 +72,7 @@ import {
   repairText,
   toNumber,
 } from '../../utils/neuroUtils.js';
-import { listCaseLibrary, runAnalysisJob } from '../../services/studyService.js';
+import { listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
 import {
   amendReport,
   approveReport,
@@ -293,6 +293,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [activeTab, setActiveTab] = useState('overview');
   const [tabLoading, setTabLoading] = useState(null);
   const [libraryScans, setLibraryScans] = useState([]);
+  const [hospitalCases, setHospitalCases] = useState([]);
   const [selectedScanId, setSelectedScanId] = useState('');
   const viewerShellRef = useRef(null);
   const viewerDragRef = useRef({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
@@ -628,6 +629,10 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadLibrary]);
+
+  useEffect(() => {
+    listHospitalCases().then((d) => setHospitalCases(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   const handleLibrarySelect = (event) => {
     const libraryId = event.target.value;
@@ -998,6 +1003,41 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
     if (tabLoading) {
       return <ModuleLoader tabId={tabLoading} />;
+    }
+
+    if (activeTab === 'hospital') {
+      return (
+        <section className="product-card">
+          <div className="product-section-title">
+            <span>Hastane Vakaları</span>
+            <h2>Anonimleştirilmiş patoloji kayıtları ({hospitalCases.length})</h2>
+          </div>
+          <p className="muted-copy">Sahte isim/soyisim · gerçek klinik veriler anonim (KVKK). Yalnız yerel.</p>
+          <div style={{ overflow: 'auto', maxHeight: 520 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr>
+                  {['Kod', 'Hasta (anonim)', 'Yaş', 'Bölüm', 'Patoloji tanısı'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px', position: 'sticky', top: 0, background: 'var(--surface, #12181c)', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {hospitalCases.map((c) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <td style={{ padding: '8px', opacity: 0.7 }}>{c.id}</td>
+                    <td style={{ padding: '8px' }}>{repairText(c.name)}</td>
+                    <td style={{ padding: '8px' }}>{c.age}</td>
+                    <td style={{ padding: '8px', opacity: 0.85 }}>{repairText(c.department)}</td>
+                    <td style={{ padding: '8px' }}>{repairText(c.diagnosis)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!hospitalCases.length ? <p className="muted-copy">Kayıt yok (yerel hospital_cases.json gerekli).</p> : null}
+        </section>
+      );
     }
 
     if (activeTab === 'pipeline') {

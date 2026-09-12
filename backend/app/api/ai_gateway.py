@@ -95,6 +95,24 @@ def _cache_put(key: str, data: dict) -> None:
         pass
 
 
+# Anonim hastane vakaları (sahte isim + de-identified klinik) — YEREL dosya, repoda YOK (KVKK)
+HOSPITAL_JSON = Path(os.environ.get(
+    "NEURO_HOSPITAL_CASES",
+    "/Users/zeynepersoz/NeuroOncoTrack/patoloji_hashed/hospital_cases.json"))
+
+
+@router.get("/api/hospital-cases")
+async def hospital_cases():
+    """Anonimleştirilmiş hastane patoloji vakaları (sahte isim/soyisim + anonim klinik).
+    Yerel dosyadan okur; veri repoya KONULMAZ (KVKK). Dosya yoksa boş dizi döner."""
+    if HOSPITAL_JSON.exists():
+        try:
+            return json.loads(HOSPITAL_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+
 def _resolve_library_path(library_id: str) -> Path:
     name = os.path.basename(library_id or "")
     p = (DEMO_DIR / name).resolve()

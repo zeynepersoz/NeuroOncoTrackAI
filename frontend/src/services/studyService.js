@@ -39,6 +39,11 @@ export async function listCaseLibrary() {
   return repairDeep(data);
 }
 
+export async function listHospitalCases() {
+  const data = await apiClient.get('/api/hospital-cases', { auth: false, base: 'root' });
+  return repairDeep(data);
+}
+
 // ─── Legacy Analiz (Doğrudan Flask/backend) ──────────────────────────────────
 
 async function runLegacyAnalysis({ libraryId, file, signal, onTaskUpdate }) {
