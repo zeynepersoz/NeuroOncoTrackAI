@@ -48,14 +48,35 @@ _TR2EN.update({"gliom": "glioma", "menenjiyom": "meningioma",
                "hipofiz": "pituitary", "tümör yok": "notumor", "tumor yok": "notumor"})
 
 # Moleküler durum: bu sürümde IDH/MGMT tahmin modeli YOK. Sahte olasılık üretmiyoruz
-# (tıbben yanıltıcı olur) — dürüst "belirlenmedi" durumu döneriz ki sekme boş kalmasın.
-_MOLECULAR_NA = {
-    "idh_status": "Belirlenmedi — moleküler test önerilir",
-    "idh_mutant_prob": None,
-    "mgmt_status": "Belirlenmedi — moleküler test önerilir",
-    "mgmt_methylated_prob": None,
-    "note": "Bu sürüm görüntüden IDH/MGMT tahmini yapmaz; kesin sonuç histopatoloji/moleküler tetkik ile.",
+# (tıbben yanıltıcı olur) — tümör tipine özel GERÇEK klinik bağlam + dürüst durum döneriz
+# ki "Sanal biyopsi" sekmesi anlamlı dolsun (boş 0% bar yerine).
+_MOL_CONTEXT = {
+    "glioma": ("Gliomlarda IDH mutasyonu ve MGMT promotor metilasyonu prognoz ve tedaviyi "
+               "belirler: IDH-mutant daha iyi prognozla, MGMT-metile temozolomid yanıtındaki "
+               "artışla ilişkilidir. Kesin sonuç moleküler patoloji (IHC/dizileme) ile."),
+    "meningioma": ("Menenjiyomda IDH/MGMT rutin belirteç değildir; WHO derecesi, Ki-67 "
+                   "proliferasyon indeksi ve beyin invazyonu prognozu belirler. Değerlendirme "
+                   "histopatoloji ile."),
+    "pituitary": ("Hipofiz adenomunda hormonal profil ve immünohistokimya (ACTH, GH, PRL, TSH, "
+                  "FSH/LH) ön plandadır; IDH/MGMT rutin uygulanmaz."),
+    "notumor": ("Görüntüde tümör saptanmadı; moleküler belirteç değerlendirmesi gerekmez. "
+                "Klinik/radyolojik izlem önerilir."),
 }
+
+
+def _molecular(pred: str | None) -> dict:
+    if pred == "glioma":
+        idh = mgmt = "Belirlenmedi — moleküler test önerilir"
+    elif pred == "notumor":
+        idh = mgmt = "Tümör yok — uygulanmaz"
+    else:  # meningioma / pituitary
+        idh = mgmt = "Bu tümör tipinde rutin değil"
+    return {
+        "idh_status": idh, "idh_mutant_prob": None,
+        "mgmt_status": mgmt, "mgmt_methylated_prob": None,
+        "note": _MOL_CONTEXT.get(pred or "", "Görüntüden moleküler tahmin yapılmaz; "
+                                 "kesin sonuç moleküler patoloji ile."),
+    }
 
 
 def _b64(data: bytes) -> str:
@@ -197,7 +218,7 @@ def _legacy_shape(classification: dict, report: dict, image_name: str,
         "model_id": classification.get("model_id"),
         "volume": None, "tumor_volume_cm3": None,
         "features": features,
-        "molecular": _MOLECULAR_NA,
+        "molecular": _molecular(pred),
         "report": payload.get("report"), "sections": payload.get("sections", {}),
         "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
         "fhir": payload.get("fhir", {}),
@@ -242,7 +263,7 @@ async def analyze(file: UploadFile | None = File(default=None),
                          "Eşdeğer çap (cm)": diam,
                          "Tümör voksel": viz.get("tumor_voxels"),
                          "Tümörlü kesit": viz.get("num_tumor_slices")},
-            "molecular": _MOLECULAR_NA,
+            "molecular": _molecular("meningioma"),
             "report": payload.get("report"), "sections": payload.get("sections", {}),
             "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
             "fhir": payload.get("fhir", {}),

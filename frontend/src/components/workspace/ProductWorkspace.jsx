@@ -1089,17 +1089,18 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                   <strong>IDH durumu</strong>
                   <small>{repairText(molecular.idh_status || 'Analiz bekleniyor')}</small>
                 </div>
-                <span>{formatPercent(toNumber(molecular.idh_mutant_prob))}</span>
-                <i style={{ width: `${Math.min(100, toNumber(molecular.idh_mutant_prob) * 100)}%` }} />
+                <span>{molecular.idh_mutant_prob != null ? formatPercent(toNumber(molecular.idh_mutant_prob)) : '—'}</span>
+                <i style={{ width: `${molecular.idh_mutant_prob != null ? Math.min(100, toNumber(molecular.idh_mutant_prob) * 100) : 0}%` }} />
               </div>
               <div className="marker-row">
                 <div>
                   <strong>MGMT metilasyon</strong>
                   <small>{repairText(molecular.mgmt_status || 'Analiz bekleniyor')}</small>
                 </div>
-                <span>{formatPercent(toNumber(molecular.mgmt_methylated_prob))}</span>
-                <i style={{ width: `${Math.min(100, toNumber(molecular.mgmt_methylated_prob) * 100)}%` }} />
+                <span>{molecular.mgmt_methylated_prob != null ? formatPercent(toNumber(molecular.mgmt_methylated_prob)) : '—'}</span>
+                <i style={{ width: `${molecular.mgmt_methylated_prob != null ? Math.min(100, toNumber(molecular.mgmt_methylated_prob) * 100) : 0}%` }} />
               </div>
+              {molecular.note ? <p className="muted-copy" style={{ marginTop: 10, lineHeight: 1.5 }}>{repairText(molecular.note)}</p> : null}
               </div>
           </section>
           <section className="product-card">
