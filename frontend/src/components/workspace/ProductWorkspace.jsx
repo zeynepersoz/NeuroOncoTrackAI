@@ -1360,8 +1360,12 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           <MetricCard
             icon={Layers}
             label="Hacim"
-            value={analysisResult ? formatNumber(analysisResult.volume, ' cm³') : '-'}
-            detail="ResUNet segmentasyonu"
+            value={analysisResult && toNumber(analysisResult.volume) > 0 ? formatNumber(analysisResult.volume, ' cm³') : '—'}
+            detail={
+              analysisResult && toNumber(analysisResult.volume) > 0
+                ? (analysisResult.equiv_diameter_cm ? `≈ ${analysisResult.equiv_diameter_cm} cm çap · nnU-Net 3D` : 'nnU-Net 3D segmentasyonu')
+                : '2D görüntü — hacim için 3D MR (NIfTI) gerekir'
+            }
             tone="info"
           />
           <MetricCard
