@@ -321,3 +321,80 @@ async def legacy_report(body: dict = Body(default={})):
     return {"report": payload.get("report", ""), "sections": payload.get("sections", {}),
             "fhir": payload.get("fhir", {}), "dual_llm": payload.get("dual_llm"),
             "is_valid": payload.get("is_valid")}
+
+
+# ── Model ↔ Gerçek tanı karşılaştırması (Teknofest doğrulama galerisi) ─────
+# Referans vakaların GERÇEK tanısı veri-seti etiketinden gelir (dosya adı / BraTS
+# menenjiyom) — uydurma yok. Model tahmini yan yana konur, uyum (✓/✗) + doğruluk
+# özeti hesaplanır. Hastane patoloji metniyle karıştırılmaz (o ayrı sekmede).
+def _gt_from_filename(fname: str) -> str | None:
+    n = fname.lower()
+    if "gliom" in n:
+        return "glioma"
+    if "meningiom" in n or "menenjiyom" in n:
+        return "meningioma"
+    if "hipofiz" in n or "pituitary" in n:
+        return "pituitary"
+    if "tumor_yok" in n or "tümör_yok" in n or "notumor" in n or "_yok" in n:
+        return "notumor"
+    return None
+
+
+@router.get("/api/comparison")
+async def model_vs_truth():
+    """Etiketli referans vakalarda MODEL TAHMİNİ ↔ GERÇEK TANI karşılaştırması.
+    Gerçek tanı veri-seti etiketinden (2D dosya adı / 3D BraTS menenjiyom) gelir; model
+    /classify_viz ile çalışır (önbellekli). Her satır: görüntü + gerçek tanı + model
+    tahmini + güven + uyum (✓/✗). Özet: doğruluk (%)."""
+    rows: list[dict] = []
+    if DEMO_DIR.exists():
+        for p in sorted(DEMO_DIR.glob("*.jpg")) + sorted(DEMO_DIR.glob("*.png")):
+            gt = _gt_from_filename(p.name)
+            if gt is None:
+                continue
+            data = p.read_bytes()
+            cached = _cache_get("lib_" + p.name)
+            if cached is not None and cached.get("prediction"):
+                pred = cached.get("prediction")
+                conf = cached.get("confidence")
+                thumb = (cached.get("images") or {}).get("original")
+            else:
+                try:
+                    cls = await _classify_bytes(data, p.name)
+                except HTTPException:
+                    continue
+                pred = cls.get("prediction")
+                c = cls.get("confidence")
+                conf = round(c * 100, 2) if isinstance(c, (int, float)) else c
+                thumb = (cls.get("images") or {}).get("original")
+            rows.append({
+                "id": p.name, "name": p.stem.replace("_", " "), "modality": "MR 2D",
+                "gt": gt, "gt_tr": _TR.get(gt, gt),
+                "pred": pred, "pred_tr": _TR.get(pred, pred),
+                "confidence": conf, "correct": (pred == gt),
+                "image": thumb or _b64(data),
+            })
+    _lbl = {"3D_MEN_0402": "3D Menenjiyom · BraTS 0402",
+            "3D_MEN_0183": "3D Menenjiyom · BraTS 0183",
+            "3D_MEN_0697": "3D Menenjiyom · BraTS 0697"}
+    for cid, path in THREE_D_CASES.items():
+        if not os.path.exists(path):
+            continue
+        cached = _cache_get("3d_" + cid)
+        row = {"id": cid, "name": _lbl.get(cid, cid), "modality": "MR 3D",
+               "gt": "meningioma", "gt_tr": "Menenjiyom",
+               "pred": None, "pred_tr": "— (3D pod kapalı)", "confidence": None,
+               "correct": None, "image": None}
+        if cached is not None and cached.get("prediction"):
+            row["pred"] = cached.get("prediction")
+            row["pred_tr"] = cached.get("diagnosis_tr") or "Menenjiyom (GTV)"
+            row["correct"] = (cached.get("prediction") == "meningioma")
+            imgs = cached.get("images") or {}
+            row["image"] = imgs.get("overlay") or imgs.get("original")
+            row["volume_cm3"] = cached.get("tumor_volume_cm3")
+        rows.append(row)
+    scored = [r for r in rows if r.get("correct") is not None]
+    correct = sum(1 for r in scored if r["correct"])
+    summary = {"total": len(rows), "scored": len(scored), "correct": correct,
+               "accuracy": round(correct / len(scored) * 100, 1) if scored else None}
+    return {"summary": summary, "cases": rows}

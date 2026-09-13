@@ -44,6 +44,12 @@ export async function listHospitalCases() {
   return repairDeep(data);
 }
 
+// Model tahmini ↔ gerçek tanı (etiketli referans vakalar) + doğruluk özeti
+export async function fetchComparison() {
+  const data = await apiClient.get('/api/comparison', { auth: false, base: 'root' });
+  return repairDeep(data);
+}
+
 // ─── Legacy Analiz (Doğrudan Flask/backend) ──────────────────────────────────
 
 async function runLegacyAnalysis({ libraryId, file, signal, onTaskUpdate }) {

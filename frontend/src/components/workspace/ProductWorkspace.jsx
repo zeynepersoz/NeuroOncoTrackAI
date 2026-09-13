@@ -72,7 +72,7 @@ import {
   repairText,
   toNumber,
 } from '../../utils/neuroUtils.js';
-import { listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
+import { fetchComparison, listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
 import {
   amendReport,
   approveReport,
@@ -294,6 +294,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [tabLoading, setTabLoading] = useState(null);
   const [libraryScans, setLibraryScans] = useState([]);
   const [hospitalCases, setHospitalCases] = useState([]);
+  const [comparison, setComparison] = useState(null);
   const [selectedScanId, setSelectedScanId] = useState('');
   const viewerShellRef = useRef(null);
   const viewerDragRef = useRef({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
@@ -632,6 +633,10 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
   useEffect(() => {
     listHospitalCases().then((d) => setHospitalCases(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchComparison().then((d) => setComparison(d && typeof d === 'object' ? d : null)).catch(() => {});
   }, []);
 
   const handleLibrarySelect = (event) => {
@@ -1003,6 +1008,53 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
     if (tabLoading) {
       return <ModuleLoader tabId={tabLoading} />;
+    }
+
+    if (activeTab === 'comparison') {
+      const cmp = comparison || { summary: {}, cases: [] };
+      const s = cmp.summary || {};
+      return (
+        <section className="product-card">
+          <div className="product-section-title">
+            <span>Model &#8596; Gerçek tanı</span>
+            <h2>Doğrulama galerisi — etiketli referans vakalar</h2>
+          </div>
+          <p className="muted-copy">
+            Gerçek tanı veri-seti etiketinden gelir (uydurma yok); model her vakayı bağımsız sınıflandırır.
+            {typeof s.accuracy === 'number' ? ` Doğruluk: ${s.correct}/${s.scored} = %${s.accuracy}.` : ''}
+          </p>
+          <div style={{ overflow: 'auto', maxHeight: 560 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr>
+                  {['Görüntü', 'Vaka', 'Gerçek tanı', 'Model tahmini', 'Güven', 'Uyum'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px', position: 'sticky', top: 0, background: 'var(--surface, #12181c)', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(cmp.cases || []).map((c) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <td style={{ padding: '6px 8px' }}>
+                      {c.image
+                        ? <img src={`data:image/jpeg;base64,${c.image}`} alt={c.name} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                        : <span style={{ opacity: 0.4 }}>&#8212;</span>}
+                    </td>
+                    <td style={{ padding: '8px' }}>{repairText(c.name)}<div style={{ opacity: 0.5, fontSize: '0.75rem' }}>{c.modality}</div></td>
+                    <td style={{ padding: '8px' }}>{repairText(c.gt_tr)}</td>
+                    <td style={{ padding: '8px' }}>{repairText(c.pred_tr)}{typeof c.volume_cm3 === 'number' ? ` · ${c.volume_cm3} cm³` : ''}</td>
+                    <td style={{ padding: '8px' }}>{typeof c.confidence === 'number' ? `%${c.confidence}` : '—'}</td>
+                    <td style={{ padding: '8px', fontWeight: 600, color: c.correct === true ? '#3fbf7f' : c.correct === false ? '#e5484d' : 'rgba(255,255,255,0.4)' }}>
+                      {c.correct === true ? '✓ Uyumlu' : c.correct === false ? '✗ Uyumsuz' : '— (bekliyor)'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!(cmp.cases || []).length ? <p className="muted-copy">Karşılaştırma verisi yok (AI servisi :8100 açık olmalı).</p> : null}
+        </section>
+      );
     }
 
     if (activeTab === 'hospital') {
