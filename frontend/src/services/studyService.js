@@ -50,6 +50,12 @@ export async function fetchComparison() {
   return repairDeep(data);
 }
 
+// Gerçek hastane DICOM vakalarında model ↔ hastane tanısı (out-of-fold, %62.5)
+export async function fetchHospitalComparison() {
+  const data = await apiClient.get('/api/hospital-comparison', { auth: false, base: 'root' });
+  return repairDeep(data);
+}
+
 // ─── Legacy Analiz (Doğrudan Flask/backend) ──────────────────────────────────
 
 async function runLegacyAnalysis({ libraryId, file, signal, onTaskUpdate }) {

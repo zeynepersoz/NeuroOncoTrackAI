@@ -398,3 +398,25 @@ async def model_vs_truth():
     summary = {"total": len(rows), "scored": len(scored), "correct": correct,
                "accuracy": round(correct / len(scored) * 100, 1) if scored else None}
     return {"summary": summary, "cases": rows}
+
+
+# ── Hastane görüntü karşılaştırması (gerçek DICOM → model ↔ hastane tanısı) ──
+# Yerel dosya (KVKK — repoda YOK). Anonim: sahte isim, DICOM başlığı yok, sadece
+# piksel kesiti. Tahminler HASTA-BAZLI 5-fold CV out-of-fold (sızıntısız, dürüst):
+# fine-tune öncesi %12.5 → sonrası %62.5.
+HOSPITAL_IMG_JSON = Path(os.environ.get(
+    "NEURO_HOSPITAL_IMG",
+    "/Users/zeynepersoz/NeuroOncoTrack/patoloji_hashed/hospital_imaging_cases.json"))
+
+
+@router.get("/api/hospital-comparison")
+async def hospital_comparison():
+    """Gerçek hastane DICOM vakalarında MODEL TAHMİNİ ↔ HASTANE TANISI (klasör tipi).
+    Anonim (sahte isim, PHI yok). Tahminler hasta-bazlı 5-fold CV out-of-fold.
+    Dosya yoksa boş döner."""
+    if HOSPITAL_IMG_JSON.exists():
+        try:
+            return json.loads(HOSPITAL_IMG_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            return {"summary": {}, "cases": []}
+    return {"summary": {}, "cases": []}

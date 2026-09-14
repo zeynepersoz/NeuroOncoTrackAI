@@ -72,7 +72,7 @@ import {
   repairText,
   toNumber,
 } from '../../utils/neuroUtils.js';
-import { fetchComparison, listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
+import { fetchComparison, fetchHospitalComparison, listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
 import {
   amendReport,
   approveReport,
@@ -295,6 +295,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [libraryScans, setLibraryScans] = useState([]);
   const [hospitalCases, setHospitalCases] = useState([]);
   const [comparison, setComparison] = useState(null);
+  const [hospitalCmp, setHospitalCmp] = useState(null);
   const [selectedScanId, setSelectedScanId] = useState('');
   const viewerShellRef = useRef(null);
   const viewerDragRef = useRef({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
@@ -637,6 +638,10 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
   useEffect(() => {
     fetchComparison().then((d) => setComparison(d && typeof d === 'object' ? d : null)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchHospitalComparison().then((d) => setHospitalCmp(d && typeof d === 'object' ? d : null)).catch(() => {});
   }, []);
 
   const handleLibrarySelect = (event) => {
@@ -1058,7 +1063,52 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
     }
 
     if (activeTab === 'hospital') {
+      const hc = hospitalCmp || { summary: {}, cases: [] };
+      const hs = hc.summary || {};
       return (
+        <>
+        <section className="product-card">
+          <div className="product-section-title">
+            <span>Model &#8596; Hastane tanısı</span>
+            <h2>Gerçek hastane DICOM vakaları ({(hc.cases || []).length})</h2>
+          </div>
+          <p className="muted-copy">
+            Trakya Ü. Hastanesi · anonim (sahte isim, DICOM başlığı yok, yalnız piksel · KVKK, yerel).
+            {typeof hs.accuracy === 'number'
+              ? ` Model uyumu: %${hs.accuracy} — fine-tune öncesi %${hs.baseline_accuracy ?? 12.5} → sonrası %${hs.accuracy} (hasta-bazlı 5-fold CV, out-of-fold).`
+              : ''}
+          </p>
+          <div style={{ overflow: 'auto', maxHeight: 480 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr>
+                  {['Görüntü', 'Hasta (anonim)', 'Hastane tanısı', 'Model tahmini', 'Güven', 'Uyum'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px', position: 'sticky', top: 0, background: 'var(--surface, #12181c)', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(hc.cases || []).map((c) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <td style={{ padding: '6px 8px' }}>
+                      {c.image
+                        ? <img src={`data:image/jpeg;base64,${c.image}`} alt={c.id} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                        : <span style={{ opacity: 0.4 }}>&#8212;</span>}
+                    </td>
+                    <td style={{ padding: '8px' }}>{repairText(c.name)}<div style={{ opacity: 0.5, fontSize: '0.72rem' }}>{c.id} · anonim</div></td>
+                    <td style={{ padding: '8px' }}>{repairText(c.hospital_diagnosis)}</td>
+                    <td style={{ padding: '8px' }}>{repairText(c.model_pred_tr)}</td>
+                    <td style={{ padding: '8px' }}>{typeof c.model_conf === 'number' ? `%${c.model_conf}` : '—'}</td>
+                    <td style={{ padding: '8px', fontWeight: 600, color: c.correct === true ? '#3fbf7f' : c.correct === false ? '#e5484d' : 'rgba(255,255,255,0.4)' }}>
+                      {c.correct === true ? '✓ Uyumlu' : c.correct === false ? '✗ Uyumsuz' : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!(hc.cases || []).length ? <p className="muted-copy">Görüntü karşılaştırması yok (yerel hospital_imaging_cases.json gerekli).</p> : null}
+        </section>
         <section className="product-card">
           <div className="product-section-title">
             <span>Hastane Vakaları</span>
@@ -1089,6 +1139,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           </div>
           {!hospitalCases.length ? <p className="muted-copy">Kayıt yok (yerel hospital_cases.json gerekli).</p> : null}
         </section>
+        </>
       );
     }
 
