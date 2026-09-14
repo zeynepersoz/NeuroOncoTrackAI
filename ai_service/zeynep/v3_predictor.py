@@ -90,6 +90,17 @@ def _ensemble_probs(feats: np.ndarray) -> np.ndarray:
 
 def predict_v3(img: np.ndarray, apply_domain_preproc: bool = True) -> dict:
     t0 = time.perf_counter()
+    # MRI-CNN (sağlam model) — bayrak açıksa ve model varsa CNN kullan; hata olursa RF/HGB'ye düş
+    if os.environ.get("NEURO_USE_CNN", "0") == "1":
+        try:
+            from cnn_predictor import predict_cnn, cnn_available
+            if cnn_available():
+                r = predict_cnn(img)
+                r["latency_ms"] = (time.perf_counter() - t0) * 1000.0
+                r["preprocess"] = "cnn_gray_resize_imagenet"
+                return r
+        except Exception:
+            pass
     gray = _to_grayscale_u8(img)
     rgb = _kaggle_style_preprocess(gray) if apply_domain_preproc \
           else cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)

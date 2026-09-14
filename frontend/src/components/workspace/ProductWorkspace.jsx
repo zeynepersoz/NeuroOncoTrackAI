@@ -1075,7 +1075,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           <p className="muted-copy">
             Trakya Ü. Hastanesi · anonim (sahte isim, DICOM başlığı yok, yalnız piksel · KVKK, yerel).
             {typeof hs.accuracy === 'number'
-              ? ` Model uyumu: %${hs.accuracy} — fine-tune öncesi %${hs.baseline_accuracy ?? 12.5} → sonrası %${hs.accuracy} (hasta-bazlı 5-fold CV, out-of-fold).`
+              ? ` MRI-CNN (efficientnet_b0) — Kaggle testi %${hs.kaggle_acc ?? 95.8}, referans 12/12; bu hastane setinde out-of-fold %${hs.accuracy} (menenjiyom duyarlılığı fine-tune ile arttı).`
               : ''}
           </p>
           <div style={{ overflow: 'auto', maxHeight: 480 }}>

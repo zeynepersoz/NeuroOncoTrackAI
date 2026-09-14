@@ -59,8 +59,13 @@ export AI_SEG_URL=http://127.0.0.1:8200   # backend bunu kullanır
 ```
 
 ## Modeller
-- Sınıflandırma (`rf_kaggle4.pkl`, `hgb_kaggle4.pkl`), patoloji (`crc_model.pt`), 2D U-Net (`unet_men.pt`) → repoda.
+- **MRI-CNN (asıl sınıflandırıcı):** `ai_service/zeynep/finetuned_models/cnn_final.pt` (efficientnet_b0,
+  Kaggle 4-sınıf + Trakya Ü. hastane DICOM ile fine-tune; Kaggle testi %95.8, referans 12/12). Repoda YOK
+  (ayrı paylaşılır). Etkinleştirme: AI servisini `NEURO_USE_CNN=1` ile başlat (dosya yoksa/kapalıysa
+  otomatik RF+HGB'ye düşer — kırılmaz). Torch gerektirir (CPU yeterli).
+- Yedek sınıflandırma (`rf_kaggle4.pkl`, `hgb_kaggle4.pkl`), patoloji (`crc_model.pt`), 2D U-Net (`unet_men.pt`).
 - nnU-Net 3D checkpoint (~118MB) → repoda değil (GitHub 100MB limiti); Release/Drive'dan `ai_service/zeynep/finetuned_models/nnunet_men/` altına.
+- Lezyon-tespit (çok-kesit): `v3_predictor.predict_v3_lesion(slices)` — notumor-min kesiti lezyon seçer, tipi notumor-hariç verir.
 
 ## Güvenlik / KVKK
 Sırlar (`.env`, `keys/`, `*.pem`) `.gitignore`'da; commit edilmez. Hastane verisi eğitime/servise
