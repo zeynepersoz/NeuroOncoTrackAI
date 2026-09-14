@@ -130,6 +130,39 @@ def predict_v3_multislice(slices: list, apply_domain_preproc: bool = True) -> di
     }
 
 
+
+def predict_v3_lesion(slices: list, apply_domain_preproc: bool = True) -> dict:
+    """Çok-kesitli çalışma (ör. DICOM serisi) → LEZYON TESPİTİ + tümör tipi.
+    Her kesit sınıflandırılır; notumor olasılığı EN DÜŞÜK kesit = lezyonun en belirgin
+    olduğu kesit (tümör-kanıtı en yüksek). Tip kararı tüm kesitlerin ortalamasında
+    notumor hariç argmax ile verilir — küçük/yüzeysel lezyonların (ör. menenjiyom)
+    çok sayıda normal kesit arasında ORTALAMADA seyrelmesini azaltır ve modelin
+    tümörü hangi kesitte gördüğünü raporlar (açıklanabilirlik)."""
+    if not slices:
+        raise ValueError("En az 1 dilim gerekli.")
+    P = []
+    for s in slices:
+        gray = _to_grayscale_u8(s)
+        rgb = _kaggle_style_preprocess(gray) if apply_domain_preproc \
+              else cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+        P.append(_ensemble_probs(_extract_feats(rgb)))
+    P = np.array(P)
+    notum = P[:, 2]
+    lesion = int(notum.argmin())
+    mean = P.mean(0)
+    typ = mean.copy(); typ[2] = -1.0
+    ti = int(typ.argmax())
+    return {
+        "prediction": CLASS_NAMES[ti],
+        "confidence": float(mean[ti]),
+        "lesion_slice": lesion,
+        "n_slices": len(slices),
+        "tumor_evidence": float(1.0 - notum.min()),
+        "notumor_prob": float(mean[2]),
+        "probabilities": {CLASS_NAMES[i]: float(mean[i]) for i in range(len(CLASS_NAMES))},
+        "model": "v3_lesion_detect",
+    }
+
 def get_v3_info() -> dict:
     info = {
         "model_id": "v3_rf_hgb_kaggle4",

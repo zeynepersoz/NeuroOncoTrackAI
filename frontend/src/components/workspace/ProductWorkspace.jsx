@@ -1095,7 +1095,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                         ? <img src={`data:image/jpeg;base64,${c.image}`} alt={c.id} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
                         : <span style={{ opacity: 0.4 }}>&#8212;</span>}
                     </td>
-                    <td style={{ padding: '8px' }}>{repairText(c.name)}<div style={{ opacity: 0.5, fontSize: '0.72rem' }}>{c.id} · anonim</div></td>
+                    <td style={{ padding: '8px' }}>{repairText(c.name)}<div style={{ opacity: 0.5, fontSize: '0.72rem' }}>{c.id} · anonim{typeof c.lesion_slice === 'number' ? ` · lezyon: kesit ${c.lesion_slice + 1}/${c.n_slices}` : ''}</div></td>
                     <td style={{ padding: '8px' }}>{repairText(c.hospital_diagnosis)}</td>
                     <td style={{ padding: '8px' }}>{repairText(c.model_pred_tr)}</td>
                     <td style={{ padding: '8px' }}>{typeof c.model_conf === 'number' ? `%${c.model_conf}` : '—'}</td>
