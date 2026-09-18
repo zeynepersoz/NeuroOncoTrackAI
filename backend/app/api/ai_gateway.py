@@ -175,9 +175,15 @@ async def _classify_bytes(data: bytes, filename: str) -> dict:
 async def _segment_viz(nii_bytes: bytes, name: str) -> dict:
     """Pod GPU 3D segmentasyon (tünel :8200) → hacim + kesit görselleri."""
     gz = gzip.compress(nii_bytes)
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        r = await client.post(f"{SEG_BASE}/segment_viz",
-                              files={"file": (name + ".gz", gz, "application/gzip")})
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            r = await client.post(f"{SEG_BASE}/segment_viz",
+                                  files={"file": (name + ".gz", gz, "application/gzip")})
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503,
+                            detail=("3D segmentasyon servisi kapalı (pod GPU + SSH tüneli :8200 gerekli). "
+                                    "2D görüntüler için yükleme çalışır; 3D için pod'u açıp tüneli kurun. "
+                                    f"[{type(exc).__name__}]"))
     if r.status_code != 200:
         raise HTTPException(status_code=502,
                             detail=f"3D segmentasyon hatası ({r.status_code}). Pod/tünel açık mı? {r.text[:150]}")
@@ -270,6 +276,46 @@ async def analyze(file: UploadFile | None = File(default=None),
             "images": viz.get("images", {}),
             "image_name": os.path.basename(path),
             "note": f"3D nnU-Net segmentasyonu (GPU) — tümör hacmi {vol} cm³ (≈ {diam} cm eşdeğer çap).",
+        }
+        _cache_put(key, result)
+        return result
+
+    # ── 3D NIfTI dosya yükleme (frontend testi: .nii / .nii.gz) ──────────
+    if file is not None and (file.filename or "").lower().endswith((".nii", ".nii.gz")):
+        nii = await file.read()
+        name = file.filename or "upload.nii"
+        if name.lower().endswith(".gz"):          # zaten sıkıştırılmış → aç (çift-gzip olmasın)
+            try:
+                nii = gzip.decompress(nii)
+            except Exception:
+                pass
+        key = "up3d_" + hashlib.sha256(nii).hexdigest()[:16]
+        cached = _cache_get(key)
+        if cached is not None:
+            return {**cached, "cached": True}
+        viz = await _segment_viz(nii, os.path.basename(name))
+        vol = viz.get("volume_cm3")
+        diam = round(2 * (3 * vol / (4 * 3.14159265)) ** (1 / 3), 1) if vol else None
+        model_output = {"prediction": "meningioma", "prediction_tr": "Menenjiyom",
+                        "tumor_volume_cm3": vol}
+        report = await _report(model_output)
+        payload = (report or {}).get("payload", {})
+        result = {
+            "prediction": "meningioma", "predicted_tumor_type": "meningioma",
+            "diagnosis_tr": "Menenjiyom (GTV)",
+            "confidence": None, "probs": {},
+            "model_id": viz.get("engine", "nnunet_3d_fullres"),
+            "volume": vol, "tumor_volume_cm3": vol, "equiv_diameter_cm": diam,
+            "features": {"Hacim (cm3)": vol, "Esdeger cap (cm)": diam,
+                         "Tumor voksel": viz.get("tumor_voxels"),
+                         "Tumorlu kesit": viz.get("num_tumor_slices")},
+            "molecular": _molecular("meningioma"),
+            "report": payload.get("report"), "sections": payload.get("sections", {}),
+            "is_valid": payload.get("is_valid"), "dual_llm": payload.get("dual_llm"),
+            "fhir": payload.get("fhir", {}),
+            "images": viz.get("images", {}),
+            "image_name": os.path.basename(name),
+            "note": f"3D nnU-Net segmentasyonu (GPU) - yuklenen NIfTI. Tumor hacmi {vol} cm3 (~ {diam} cm).",
         }
         _cache_put(key, result)
         return result

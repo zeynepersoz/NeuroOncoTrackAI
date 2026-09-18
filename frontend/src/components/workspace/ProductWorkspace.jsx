@@ -1727,7 +1727,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           <label className={`upload-tile ${canUploadStudy ? '' : 'disabled'}`}>
             <Upload size={18} />
             <span>MRG yükle</span>
-            <input type="file" accept="image/*" onChange={handleFileUpload} disabled={loading || !canUploadStudy} />
+            <input type="file" accept="image/*,.nii,.nii.gz,.dcm,application/gzip" onChange={handleFileUpload} disabled={loading || !canUploadStudy} />
           </label>
 
           <section className={`case-filter-panel ${isCaseFilterOpen ? 'open' : ''}`} aria-label="Vaka filtresi">
