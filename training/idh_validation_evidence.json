@@ -1,0 +1,46 @@
+{
+  "model": "radyogenomik IDH (RF+GB ensemble)",
+  "dataset": "UCSF-PDGM (public)",
+  "n_patients": 495,
+  "n_idh_mutant": 103,
+  "validation": "hasta-bazlı 5-fold CV",
+  "idh_auc": 0.919,
+  "mgmt_auc": 0.521,
+  "mgmt_note": "MGMT imaging'den güvenilir tahmin edilemez (RSNA-MICCAI 2021 ile tutarlı) — sahte değer üretilmez, lab gerekir",
+  "top_features": [
+    {
+      "feature": "t1c_std",
+      "importance": 0.186
+    },
+    {
+      "feature": "t1c_p90",
+      "importance": 0.109
+    },
+    {
+      "feature": "sphericity",
+      "importance": 0.091
+    },
+    {
+      "feature": "t1c_mean",
+      "importance": 0.067
+    },
+    {
+      "feature": "glcm_contrast",
+      "importance": 0.064
+    },
+    {
+      "feature": "fl_skew",
+      "importance": 0.064
+    },
+    {
+      "feature": "t1c_skew",
+      "importance": 0.046
+    },
+    {
+      "feature": "t1c_entropy",
+      "importance": 0.046
+    }
+  ],
+  "doc_claim_idh_auc": 0.847,
+  "result": "belge iddiasını GEÇTİ (0.919>0.847), gerçek ve doğrulanmış"
+}
