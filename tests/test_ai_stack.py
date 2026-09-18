@@ -192,13 +192,61 @@ def test_auth_endpoint():
     check("auth/login ucu mevcut (404 değil)", r.status_code != 404, f"HTTP {r.status_code}")
 
 
+# ── 11. Model ↔ gerçek tanı karşılaştırması (referans doğrulama galerisi) ──
+def test_comparison():
+    print("[11] /api/comparison — model ↔ gerçek tanı (etiketli referans)")
+    r = httpx.get(f"{BACKEND}/api/comparison", timeout=120)
+    d = r.json()
+    check("comparison HTTP 200", r.status_code == 200)
+    cases = d.get("cases", [])
+    check("comparison vaka listesi dolu", isinstance(cases, list) and len(cases) > 0, f"len={len(cases)}")
+    s = d.get("summary", {})
+    check("comparison doğruluk özeti var", isinstance(s.get("accuracy"), (int, float)), str(s.get("accuracy")))
+    if cases:
+        c = cases[0]
+        check("comparison satırında gt+pred+uyum var",
+              all(k in c for k in ("gt", "pred", "correct")))
+
+
+# ── 12. Hastane görüntü karşılaştırması (anonim, yerel — yapı kontrolü) ──
+def test_hospital_comparison():
+    print("[12] /api/hospital-comparison — hastane model↔tanı (anonim)")
+    r = httpx.get(f"{BACKEND}/api/hospital-comparison", timeout=30)
+    check("hospital-comparison HTTP 200", r.status_code == 200)
+    d = r.json()
+    check("hospital-comparison summary+cases şeması", isinstance(d, dict) and "cases" in d and "summary" in d)
+    cases = d.get("cases", [])
+    if cases:
+        c = cases[0]
+        check("hospital vaka anonim (sahte isim bayrağı)", bool(c.get("name_synthetic")))
+        check("hospital vaka model↔tanı alanları", all(k in c for k in ("hospital_diagnosis", "model_pred", "correct")))
+    else:
+        skip("hospital-comparison içerik", "yerel hospital_imaging_cases.json yok (KVKK — repoda tutulmaz)")
+
+
+# ── 13. 3D NIfTI yükleme — pod kapalıyken opak 500 değil, net hata ──
+def test_3d_upload_graceful():
+    print("[13] /api/analyze 3D upload — pod kapalıyken dürüst hata")
+    if _up(SEG):
+        return skip("3d_upload_graceful", "pod açık — hata yolu test edilmez")
+    fake_nii = b"\x00" * 4096
+    r = httpx.post(f"{BACKEND}/api/analyze",
+                   files={"file": ("test.nii", fake_nii, "application/octet-stream")}, timeout=30)
+    # pod kapalı: 503 (veya 5xx) + anlamlı mesaj beklenir; 2D'ye kayıp 200 dönmemeli
+    check("3D upload 2D'ye kaymıyor (200 dönmez)", r.status_code != 200, f"HTTP {r.status_code}")
+    body = r.text.lower()
+    check("3D upload hatası pod/segmentasyonu işaret ediyor",
+          ("segmentasyon" in body or "pod" in body or "8200" in body), body[:120])
+
+
 def main():
     print("=" * 64)
     print("NeuroOncoTrack-AI — stack testi")
     print("=" * 64)
     for fn in [test_health, test_classify, test_classify_viz, test_report_dual,
                test_pathology, test_library, test_analyze_2d_no_empty, test_cache,
-               test_analyze_3d, test_auth_endpoint]:
+               test_analyze_3d, test_auth_endpoint,
+               test_comparison, test_hospital_comparison, test_3d_upload_graceful]:
         try:
             fn()
         except Exception as e:
