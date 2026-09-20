@@ -30,13 +30,18 @@ import {
   User,
   UserCheck,
   UserMinus,
+  UserPlus,
   Users,
   X,
   XCircle,
   Zap,
+  Copy,
+  Check,
 } from 'lucide-react';
 import ThemeToggle from '../common/ThemeToggle.jsx';
 import {
+  createAdminUser,
+  removeUserFromOrganization as removeAdminUserFromOrg,
   deleteAdminUser,
   forceLogoutAdminUser,
   getAdminAuditLog,
@@ -51,8 +56,12 @@ import {
   revokeAdminSession,
   getAdminSecurityTrends,
   getAdminSecurityOrganizations,
+  getAdminUserPermissions,
+  updateAdminUserPermissions,
 } from '../../services/adminService.js';
 import {
+  createSuperAdminUser,
+  removeUserFromOrganization as removeSuperAdminUserFromOrg,
   createSuperAdminOrganization,
   deleteSuperAdminOrganization,
   deleteSuperAdminUser,
@@ -62,7 +71,7 @@ import {
   getSuperAdminOrganizations,
   getSuperAdminOrganizationDetail,
   deactivateSuperAdminOrganization,
-    getSuperAdminSessions,
+  getSuperAdminSessions,
   getSuperAdminStats,
   getSuperAdminUsers,
   patchSuperAdminOrganization,
@@ -70,6 +79,8 @@ import {
   revokeSuperAdminSession,
   getSuperAdminSecurityTrends,
   getSuperAdminSecurityOrganizations,
+  getSuperAdminUserPermissions,
+  updateSuperAdminUserPermissions,
 } from '../../services/superadminService.js';
 import { changePassword, getMe, updateMe } from '../../services/authService.js';
 import { MfaTabContent, SessionsTabContent } from '../user/UserModals.jsx';
@@ -306,25 +317,573 @@ function SelectFilter({ value, onChange, options, placeholder }) {
   );
 }
 
+const SYSTEM_PERMISSION_CATEGORIES = [
+  {
+    id: 'ai',
+    name: 'AI & Analiz',
+    perms: [
+      { id: 'ai:run_segmentation', label: '3D Segmentasyon Çalıştırma' },
+      { id: 'ai:run_biopsy', label: 'Sanal Biyopsi Çalıştırma' },
+      { id: 'ai:run_xai', label: 'XAI Açıklanabilirlik' },
+      { id: 'ai:view_result', label: 'AI Sonuçlarını İnceleme' },
+      { id: 'ai:override', label: 'AI Kararını Geçersiz Kılma' },
+    ],
+  },
+  {
+    id: 'report',
+    name: 'Klinik Rapor',
+    perms: [
+      { id: 'report:generate', label: 'Rapor Oluşturma' },
+      { id: 'report:read', label: 'Rapor İnceleme' },
+      { id: 'report:edit_draft', label: 'Taslak Düzenleme' },
+      { id: 'report:approve', label: 'Rapor Onaylama' },
+      { id: 'report:sign', label: 'Dijital İmzalama' },
+      { id: 'report:export_pdf', label: 'PDF Dışa Aktarma' },
+    ],
+  },
+  {
+    id: 'patient',
+    name: 'Hasta & Tetkik',
+    perms: [
+      { id: 'patient:create', label: 'Hasta Oluşturma' },
+      { id: 'patient:read', label: 'Hasta Görüntüleme' },
+      { id: 'patient:update', label: 'Hasta Güncelleme' },
+      { id: 'patient:delete', label: 'Hasta Kaydı Silme' },
+      { id: 'study:upload', label: 'DICOM Yükleme' },
+      { id: 'study:read', label: 'DICOM Görüntüleme' },
+      { id: 'study:download', label: 'DICOM İndirme' },
+      { id: 'study:delete', label: 'DICOM Silme' },
+    ],
+  },
+  {
+    id: 'system',
+    name: 'Sistem & FHIR',
+    perms: [
+      { id: 'fhir:read', label: 'FHIR Okuma' },
+      { id: 'fhir:write', label: 'FHIR Yazma' },
+      { id: 'fhir:sync', label: 'FHIR Senkronizasyon' },
+      { id: 'audit:read', label: 'Denetim Kaydı Okuma' },
+      { id: 'audit:export', label: 'Denetim Dışa Aktarma' },
+      { id: 'system:config', label: 'Sistem Yapılandırma' },
+      { id: 'system:health', label: 'Sistem Sağlık Takibi' },
+    ],
+  },
+];
+
+// ─── Yeni Kullanıcı Ekleme Modalı (Onboarding) ─────────────────────────────
+
+function CreateUserModal({
+  onClose,
+  onCreated,
+  isSuperAdmin,
+  organizations = [],
+  defaultOrgId = null,
+  session,
+  zIndex = 10000,
+}) {
+  const actorOrgId = defaultOrgId || session?.user?.organization_id || session?.user?.organizationId;
+  const actorOrg = organizations.find(o => String(o.id) === String(actorOrgId));
+
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    title: '',
+    email: '',
+    role: 'PHYSICIAN',
+    organization_id: actorOrgId || '',
+  });
+
+  const [creating, setCreating] = useState(false);
+  const [createdResult, setCreatedResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    setErrorMsg(null);
+    try {
+      const payload = {
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        title: formData.title.trim() || undefined,
+        email: formData.email.trim(),
+        role: formData.role,
+        ...(isSuperAdmin && formData.organization_id ? { organization_id: formData.organization_id } : {}),
+      };
+
+      const res = isSuperAdmin
+        ? await createSuperAdminUser(payload)
+        : await createAdminUser(payload);
+
+      setCreatedResult(res);
+      if (onCreated) onCreated(res?.user);
+    } catch (err) {
+      setErrorMsg(err?.response?.data?.detail || err?.detail || err?.message || 'Kullanıcı oluşturulamadı.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyToken = () => {
+    if (createdResult?.setup_token) {
+      navigator.clipboard.writeText(createdResult.setup_token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%',
+    boxSizing: 'border-box',
+    background: 'var(--surface-muted)',
+    border: '1px solid var(--line)',
+    borderRadius: 8,
+    padding: '0.5rem 0.75rem',
+    color: 'var(--ink)',
+    fontSize: '0.875rem',
+    outline: 'none',
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex,
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 16,
+          boxShadow: 'var(--shadow)',
+          width: '100%',
+          maxWidth: 520,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          color: 'var(--ink)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Başlık */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1.25rem 1.5rem',
+          borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{
+              width: 36, height: 36, borderRadius: 9,
+              background: 'color-mix(in srgb, var(--teal) 12%, transparent)',
+              color: 'var(--teal)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <UserPlus size={18} />
+            </span>
+            <div>
+              <strong style={{ fontSize: '1rem', display: 'block', color: 'var(--ink)' }}>
+                {createdResult ? 'Kullanıcı Hesabı Açıldı' : 'Yeni Kullanıcı Oluştur'}
+              </strong>
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                {createdResult ? 'İlk giriş kurulum kodu üretildi' : 'Kuruma hekim veya personel onboarding yapın'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid var(--line)',
+              cursor: 'pointer', color: 'var(--muted)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Gövde */}
+        {!createdResult ? (
+          <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {errorMsg && (
+              <div style={{
+                padding: '0.625rem 0.875rem',
+                background: 'var(--danger-bg)',
+                border: '1px solid var(--rose)',
+                borderRadius: 8,
+                color: 'var(--rose)',
+                fontSize: '0.8125rem',
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+              }}>
+                <AlertCircle size={15} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                  Ad *
+                </label>
+                <input
+                  required
+                  style={inputStyle}
+                  value={formData.first_name}
+                  onChange={e => setFormData(p => ({ ...p, first_name: e.target.value }))}
+                  placeholder="Ahmet"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                  Soyad *
+                </label>
+                <input
+                  required
+                  style={inputStyle}
+                  value={formData.last_name}
+                  onChange={e => setFormData(p => ({ ...p, last_name: e.target.value }))}
+                  placeholder="Yılmaz"
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                  Unvan
+                </label>
+                <input
+                  style={inputStyle}
+                  value={formData.title}
+                  onChange={e => setFormData(p => ({ ...p, title: e.target.value }))}
+                  placeholder="Dr., Doç. Dr., Uzm."
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                  Sistem Rolü *
+                </label>
+                <select
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                  value={formData.role}
+                  onChange={e => setFormData(p => ({ ...p, role: e.target.value }))}
+                >
+                  <option value="PHYSICIAN">Hekim (PHYSICIAN)</option>
+                  <option value="RADIOLOGY_TECH">Radyoloji Teknisyeni (RADIOLOGY_TECH)</option>
+                  <option value="RESEARCHER">Araştırmacı (RESEARCHER)</option>
+                  <option value="AUDITOR">Gözlemci / Denetçi (AUDITOR)</option>
+                  {isSuperAdmin && <option value="HOSPITAL_ADMIN">Yönetici (HOSPITAL_ADMIN)</option>}
+                  {isSuperAdmin && <option value="SUPER_ADMIN">Süper Yönetici (SUPER_ADMIN)</option>}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                E-posta Adresi *
+              </label>
+              <input
+                required
+                type="email"
+                style={inputStyle}
+                value={formData.email}
+                onChange={e => setFormData(p => ({ ...p, email: e.target.value }))}
+                placeholder="doktor@hastane.gov.tr"
+              />
+            </div>
+
+            {/* Kurum Seçici / Rozeti */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
+                Kurum / Hastane *
+              </label>
+              {isSuperAdmin ? (
+                <select
+                  required
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                  value={formData.organization_id}
+                  onChange={e => setFormData(p => ({ ...p, organization_id: e.target.value }))}
+                >
+                  <option value="">Kurum Seçin...</option>
+                  {organizations.map(o => (
+                    <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.55rem 0.75rem',
+                  background: 'var(--surface-muted)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  fontSize: '0.8125rem',
+                  color: 'var(--ink)',
+                }}>
+                  <Building2 size={16} color="var(--teal)" />
+                  <span style={{ fontWeight: 600 }}>{actorOrg?.name || 'Kurumunuz'}</span>
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--faint)', marginLeft: 'auto', fontFamily: 'monospace' }}>
+                    Otomatik Atandı
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              padding: '0.75rem',
+              background: 'color-mix(in srgb, var(--cyan) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--cyan) 20%, transparent)',
+              borderRadius: 8,
+              fontSize: '0.75rem',
+              color: 'var(--muted)',
+              display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+            }}>
+              <ShieldCheck size={16} color="var(--cyan)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <strong>Güvenli İlk Parola Politikası:</strong> Kullanıcı doğrudan şifresiz oluşturulur. Sistem tek kullanımlık bir <code>setup_token</code> üretecek ve kullanıcı ilk girişinde kendi parolasını belirleyecektir.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--line)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: 'var(--surface-muted)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  color: 'var(--muted)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                disabled={creating}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  background: 'var(--teal)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {creating ? <RefreshCw size={14} className="spin" /> : <UserPlus size={14} />}
+                {creating ? 'Oluşturuluyor...' : 'Kullanıcıyı Oluştur'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* Başarılı Oluşturma & Token Gösterimi */
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              textAlign: 'center', padding: '1rem 0',
+            }}>
+              <span style={{
+                width: 52, height: 52, borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--teal) 15%, transparent)',
+                color: 'var(--teal)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: '0.75rem',
+              }}>
+                <CheckCircle size={28} />
+              </span>
+              <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.125rem', color: 'var(--ink)' }}>
+                Kullanıcı Hesabı Oluşturuldu!
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--muted)' }}>
+                {createdResult.user?.first_name} {createdResult.user?.last_name} ({createdResult.user?.email})
+              </p>
+            </div>
+
+            {/* Token Kartı */}
+            <div style={{
+              background: 'var(--surface-muted)',
+              border: '1px solid var(--line)',
+              borderRadius: 10,
+              padding: '1rem',
+              display: 'flex', flexDirection: 'column', gap: '0.5rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  Tek Kullanımlık Kurulum Kodu (Setup Token)
+                </span>
+                <span style={{ fontSize: '0.6875rem', color: 'var(--teal)', fontWeight: 600 }}>
+                  İlk Girişte Geçerli
+                </span>
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                background: 'var(--surface)',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                padding: '0.45rem 0.75rem',
+              }}>
+                <code style={{
+                  flex: 1, fontFamily: 'monospace', fontSize: '0.8125rem',
+                  color: 'var(--teal)', wordBreak: 'break-all',
+                }}>
+                  {createdResult.setup_token}
+                </code>
+                <button
+                  type="button"
+                  onClick={copyToken}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '0.35rem 0.65rem',
+                    background: copied ? 'var(--teal)' : 'var(--surface-muted)',
+                    color: copied ? '#fff' : 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  <span>{copied ? 'Kopyalandı!' : 'Kopyala'}</span>
+                </button>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginTop: 2 }}>
+                Bu token kullanıcının e-posta adresiyle birlikte sisteme ilk kez şifre oluşturmasında kullanılır.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  background: 'var(--teal)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                }}
+              >
+                Tamamla ve Kapat
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Kullanıcı Düzenleme Modalı ──────────────────────────────────────────────
 
-function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuperAdmin }) {
+function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, onRemoveFromOrg, isSuperAdmin, organizations = [], zIndex = 10000 }) {
+  const initialRole = user?.role === 'RADIOLOGIST' ? 'RADIOLOGY_TECH' : user?.role === 'VIEWER' ? 'AUDITOR' : user?.role === 'SUPERADMIN' ? 'SUPER_ADMIN' : (user?.role || 'PHYSICIAN');
+  const userOrg = organizations.find(o => String(o.id) === String(user?.organization_id));
+  const initialOrgName = user?.organization_name || userOrg?.name || '';
+  const initialOrgCode = user?.organization_code || userOrg?.code || '';
+
   const [formData, setFormData] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     title: user?.title || '',
     email: user?.email || '',
-    role: user?.role || 'PHYSICIAN',
-    organization_name: user?.organization_name || '',
-    permissions: user?.permissions || [],
+    role: initialRole,
+    initial_role: initialRole,
+    organization_id: user?.organization_id || '',
+    organization_name: initialOrgName,
+    organization_code: initialOrgCode,
+    extra_permissions: user?.extra_permissions || [],
+    permissions: user?.extra_permissions || user?.permissions || [],
     is_active: user?.is_active ?? true,
     is_locked: user?.is_locked ?? false,
     must_change_password: user?.must_change_password ?? false,
   });
+  const [showOrgPicker, setShowOrgPicker] = useState(false);
+  const [orgSearchTerm, setOrgSearchTerm] = useState('');
+  const [allOrgs, setAllOrgs] = useState(organizations);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+
+  useEffect(() => {
+    if (organizations && organizations.length > 0) {
+      setAllOrgs(organizations);
+    } else if (isSuperAdmin) {
+      setLoadingOrgs(true);
+      getSuperAdminOrganizations()
+        .then(res => setAllOrgs(res?.organizations || res?.items || []))
+        .catch(() => {})
+        .finally(() => setLoadingOrgs(false));
+    }
+  }, [organizations, isSuperAdmin]);
+
+  // Keep org name/code synchronized if user or organizations change
+  useEffect(() => {
+    if (formData.organization_id && allOrgs.length > 0) {
+      const match = allOrgs.find(o => String(o.id) === String(formData.organization_id));
+      if (match && (!formData.organization_name || formData.organization_name !== match.name)) {
+        setFormData(p => ({
+          ...p,
+          organization_name: match.name,
+          organization_code: match.code,
+        }));
+      }
+    }
+  }, [formData.organization_id, allOrgs]);
+  const [permBreakdown, setPermBreakdown] = useState(null);
+  const [loadingPerms, setLoadingPerms] = useState(false);
+  const [permCategory, setPermCategory] = useState('all');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveOrg, setConfirmRemoveOrg] = useState(false);
+  const [removingOrg, setRemovingOrg] = useState(false);
   const isMouseDownOnBackdrop = useRef(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      setLoadingPerms(true);
+      const fetcher = isSuperAdmin
+        ? getSuperAdminUserPermissions(user.id)
+        : getAdminUserPermissions(user.id);
+      fetcher
+        .then(data => {
+          if (data) {
+            setPermBreakdown(data);
+            const extra = data.extra_permissions || [];
+            setFormData(p => ({
+              ...p,
+              extra_permissions: extra,
+              permissions: extra,
+            }));
+          }
+        })
+        .catch(err => console.error('Yetkiler yüklenirken hata oluştu:', err))
+        .finally(() => setLoadingPerms(false));
+    }
+  }, [user?.id, isSuperAdmin]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -389,7 +948,7 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        zIndex,
         background: 'rgba(0,0,0,0.5)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
@@ -498,17 +1057,23 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
                 Sistem Rolü *
               </label>
               <select
-                style={{ ...inputStyle, cursor: 'pointer' }}
-                value={formData.role}
+                style={{ ...inputStyle, cursor: (!isSuperAdmin && (user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN')) ? 'not-allowed' : 'pointer' }}
+                value={formData.role === 'RADIOLOGIST' ? 'RADIOLOGY_TECH' : formData.role === 'VIEWER' ? 'AUDITOR' : formData.role}
                 onChange={e => setFormData(p => ({ ...p, role: e.target.value }))}
+                disabled={!isSuperAdmin && (user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN')}
               >
                 <option value="PHYSICIAN">Hekim (PHYSICIAN)</option>
-                <option value="RADIOLOGIST">Radyolog (RADIOLOGIST)</option>
+                <option value="RADIOLOGY_TECH">Radyolog / Teknisyen (RADIOLOGY_TECH)</option>
                 <option value="RESEARCHER">Araştırmacı (RESEARCHER)</option>
-                <option value="HOSPITAL_ADMIN">Yönetici (HOSPITAL_ADMIN)</option>
+                <option value="AUDITOR">Gözlemci / Denetçi (AUDITOR)</option>
+                {isSuperAdmin && <option value="HOSPITAL_ADMIN">Yönetici (HOSPITAL_ADMIN)</option>}
                 {isSuperAdmin && <option value="SUPER_ADMIN">Süper Yönetici (SUPER_ADMIN)</option>}
-                <option value="VIEWER">Gözlemci (VIEWER)</option>
               </select>
+              {!isSuperAdmin && (user?.role === 'HOSPITAL_ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                <span style={{ fontSize: '0.6875rem', color: 'var(--amber)', marginTop: 2, display: 'block' }}>
+                  Yönetici seviyesindeki kullanıcıların rolü değiştirilemez.
+                </span>
+              )}
             </div>
           </div>
 
@@ -526,16 +1091,196 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
             />
           </div>
 
+          {/* Kurum / Organizasyon */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>
-              Kurum / Organizasyon
-            </label>
-            <input
-              style={inputStyle}
-              value={formData.organization_name}
-              onChange={e => setFormData(p => ({ ...p, organization_name: e.target.value }))}
-              placeholder="Kurum adı"
-            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)' }}>
+                Kurum / Organizasyon
+              </label>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowOrgPicker(p => !p)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--teal)',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                  onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                >
+                  <Building2 size={13} />
+                  {showOrgPicker ? 'Seçimi Kapat' : '🏥 Kurumu Değiştir / Ata'}
+                </button>
+              )}
+            </div>
+
+            {/* Mevcut Kurum Bilgi Kartı */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.55rem 0.75rem',
+              background: 'var(--surface-muted)',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <span style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  background: 'color-mix(in srgb, var(--cyan) 15%, transparent)',
+                  color: 'var(--cyan)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Building2 size={16} />
+                </span>
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink)' }}>
+                    {formData.organization_name || 'Kurum Atanmamış'}
+                  </div>
+                  {formData.organization_code && (
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--faint)', fontFamily: 'monospace' }}>
+                      KOD: {formData.organization_code}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {isSuperAdmin && !showOrgPicker && (
+                <button
+                  type="button"
+                  onClick={() => setShowOrgPicker(true)}
+                  style={{
+                    padding: '0.25rem 0.6rem',
+                    fontSize: '0.75rem',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    color: 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Pencil size={12} />
+                  Değiştir
+                </button>
+              )}
+            </div>
+
+            {/* Kurum Arama ve Seçme Paneli (Süper Admin) */}
+            {isSuperAdmin && showOrgPicker && (
+              <div style={{
+                marginTop: '0.5rem',
+                padding: '0.75rem',
+                background: 'var(--surface)',
+                border: '1px solid var(--teal)',
+                borderRadius: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--teal)' }}>
+                    Hastane / Kurum Seçin (Tüm Sistem)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOrgPicker(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {/* Arama Input */}
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                  <input
+                    type="text"
+                    style={{ ...inputStyle, paddingLeft: '2rem', fontSize: '0.8125rem' }}
+                    placeholder="Hastane adı veya kurum kodu ile ara..."
+                    value={orgSearchTerm}
+                    onChange={e => setOrgSearchTerm(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Kurum Listesi */}
+                <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {loadingOrgs ? (
+                    <div style={{ textAlign: 'center', padding: '0.5rem', color: 'var(--muted)', fontSize: '0.75rem' }}>
+                      <RefreshCw size={14} className="spin" /> Kurumlar taranıyor...
+                    </div>
+                  ) : allOrgs.filter(o => {
+                    const q = orgSearchTerm.toLowerCase();
+                    return !q || o.name?.toLowerCase().includes(q) || o.code?.toLowerCase().includes(q);
+                  }).length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '0.5rem', color: 'var(--muted)', fontSize: '0.75rem' }}>
+                      Eşleşen kurum bulunamadı.
+                    </div>
+                  ) : (
+                    allOrgs.filter(o => {
+                      const q = orgSearchTerm.toLowerCase();
+                      return !q || o.name?.toLowerCase().includes(q) || o.code?.toLowerCase().includes(q);
+                    }).map(orgItem => {
+                      const isSelected = String(orgItem.id) === String(formData.organization_id);
+                      return (
+                        <div
+                          key={orgItem.id}
+                          onClick={() => {
+                            setFormData(p => ({
+                              ...p,
+                              organization_id: orgItem.id,
+                              organization_name: orgItem.name,
+                              organization_code: orgItem.code,
+                            }));
+                            setShowOrgPicker(false);
+                            setOrgSearchTerm('');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.45rem 0.6rem',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            background: isSelected ? 'color-mix(in srgb, var(--teal) 15%, transparent)' : 'var(--surface-muted)',
+                            border: isSelected ? '1px solid var(--teal)' : '1px solid transparent',
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 8%, transparent)'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface-muted)'; }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--ink)' }}>{orgItem.name}</div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--faint)', fontFamily: 'monospace' }}>KOD: {orgItem.code}</div>
+                          </div>
+                          {isSelected && (
+                            <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <CheckCircle size={13} /> Seçili
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Özel Yetkiler / İzinler */}
@@ -548,33 +1293,148 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
             flexDirection: 'column',
             gap: '0.75rem',
           }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Özel Yetkiler / İzinler
-            </span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              {[
-                { id: 'export_data', label: 'Veri Dışa Aktar' },
-                { id: 'delete_records', label: 'Kayıt Silme' },
-                { id: 'manage_settings', label: 'Sistem Ayarları' },
-                { id: 'view_audit', label: 'Denetim Kayıtları' }
-              ].map(perm => (
-                <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', fontSize: '0.8125rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={formData.permissions?.includes(perm.id)}
-                    onChange={e => {
-                      if (e.target.checked) {
-                        setFormData(p => ({ ...p, permissions: [...(p.permissions || []), perm.id] }));
-                      } else {
-                        setFormData(p => ({ ...p, permissions: (p.permissions || []).filter(x => x !== perm.id) }));
-                      }
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Özel Yetkiler & Ek İzinler ({loadingPerms ? 'Yükleniyor...' : `${(formData.extra_permissions || []).length} Özel İzin`})
+              </span>
+              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                {[{ id: 'all', label: 'Tümü' }, ...SYSTEM_PERMISSION_CATEGORIES.map(c => ({ id: c.id, label: c.name }))].map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setPermCategory(cat.id)}
+                    style={{
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.6875rem',
+                      borderRadius: 6,
+                      border: '1px solid var(--line)',
+                      background: permCategory === cat.id ? 'var(--teal)' : 'var(--surface)',
+                      color: permCategory === cat.id ? '#fff' : 'var(--muted)',
+                      cursor: 'pointer',
                     }}
-                    style={{ accentColor: 'var(--teal)', width: 16, height: 16 }}
-                  />
-                  <span>{perm.label}</span>
-                </label>
-              ))}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {loadingPerms ? (
+              <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--muted)', fontSize: '0.8125rem' }}>
+                <RefreshCw size={14} className="spin" style={{ marginRight: 6 }} /> Yetki matrisi yükleniyor...
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: 220, overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {SYSTEM_PERMISSION_CATEGORIES
+                  .filter(cat => permCategory === 'all' || permCategory === cat.id)
+                  .map(cat => (
+                    <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--teal)', textTransform: 'uppercase' }}>
+                        {cat.name}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.4rem' }}>
+                        {cat.perms.map(perm => {
+                          const isBase = permBreakdown?.base_permissions?.includes(perm.id);
+                          const isExtra = (formData.extra_permissions || []).includes(perm.id);
+
+                          if (isBase) {
+                            return (
+                              <div
+                                key={perm.id}
+                                title="Bu yetki kullanıcının temel rolünden gelmektedir."
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  padding: '0.35rem 0.5rem',
+                                  borderRadius: 6,
+                                  background: 'color-mix(in srgb, var(--teal) 8%, transparent)',
+                                  border: '1px solid color-mix(in srgb, var(--teal) 25%, transparent)',
+                                  fontSize: '0.75rem',
+                                  color: 'var(--ink)',
+                                }}
+                              >
+                                <CheckCircle size={13} color="var(--teal)" />
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {perm.label}
+                                </span>
+                                <span style={{ fontSize: '0.625rem', color: 'var(--teal)', fontWeight: 600 }}>Rol İzni</span>
+                              </div>
+                            );
+                          }
+
+                          const isRestrictedForAdmin = !isSuperAdmin && ['system:config'].includes(perm.id);
+                          if (isRestrictedForAdmin) {
+                            return (
+                              <div
+                                key={perm.id}
+                                title="Sistem yapılandırma izinleri sadece Süper Yönetici tarafından atanabilir."
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  padding: '0.35rem 0.5rem',
+                                  borderRadius: 6,
+                                  background: 'var(--surface-muted)',
+                                  border: '1px dashed var(--line)',
+                                  fontSize: '0.75rem',
+                                  color: 'var(--faint)',
+                                  opacity: 0.65,
+                                }}
+                              >
+                                <Lock size={12} />
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {perm.label}
+                                </span>
+                                <span style={{ fontSize: '0.625rem', color: 'var(--muted)' }}>Süper Admin</span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <label
+                              key={perm.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.35rem 0.5rem',
+                                borderRadius: 6,
+                                background: isExtra ? 'color-mix(in srgb, var(--cyan) 10%, transparent)' : 'var(--surface)',
+                                border: `1px solid ${isExtra ? 'var(--cyan)' : 'var(--line)'}`,
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                color: isExtra ? 'var(--ink)' : 'var(--muted)',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isExtra}
+                                onChange={e => {
+                                  const currentExtra = formData.extra_permissions || [];
+                                  if (e.target.checked) {
+                                    const next = [...currentExtra, perm.id];
+                                    setFormData(p => ({ ...p, extra_permissions: next, permissions: next }));
+                                  } else {
+                                    const next = currentExtra.filter(x => x !== perm.id);
+                                    setFormData(p => ({ ...p, extra_permissions: next, permissions: next }));
+                                  }
+                                }}
+                                style={{ accentColor: 'var(--teal)', width: 14, height: 14 }}
+                              />
+                              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {perm.label}
+                              </span>
+                              {isExtra && <span style={{ fontSize: '0.625rem', color: 'var(--cyan)', fontWeight: 600 }}>Özel</span>}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* Durum & Güvenlik Ayarları */}
@@ -679,7 +1539,35 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
             gap: '0.5rem',
             flexWrap: 'wrap',
           }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {onRemoveFromOrg && user?.role !== 'SUPER_ADMIN' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRemoveFromOrg(user);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.875rem',
+                    background: 'color-mix(in srgb, var(--rose) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--rose) 35%, transparent)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    color: 'var(--rose)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Kullanıcının kurum ilişiğini kes"
+                >
+                  <UserMinus size={14} />
+                  Kurumdan Çıkar
+                </button>
+              )}
+
               {!confirmDelete ? (
                 <>
                 <button
@@ -707,26 +1595,28 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
                   <LogOut size={14} />
                   Oturumları Kapat
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.45rem 0.875rem',
-                    background: 'var(--danger-bg)',
-                    border: '1px solid var(--rose)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    color: 'var(--rose)',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                  }}
-                >
-                  <Trash2 size={14} />
-                  Sil
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.45rem 0.875rem',
+                      background: 'var(--danger-bg)',
+                      border: '1px solid var(--rose)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      color: 'var(--rose)',
+                      fontSize: '0.8125rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    Sil
+                  </button>
+                )}
                 </>
               ) : (
                 <div style={{
@@ -822,9 +1712,216 @@ function EditUserModal({ user, onClose, onSave, onDelete, onForceLogout, isSuper
   );
 }
 
+// ─── Kurumdan Çıkarma Onay Modalı (Warning Popup) ─────────────────────────────
+
+function RemoveUserFromOrgModal({ user, onClose, onConfirm, loading = false, zIndex = 11000 }) {
+  if (!user) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex,
+        background: 'rgba(0, 0, 0, 0.7)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.25rem',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 450,
+          background: 'var(--surface, #111f25)',
+          border: '1px solid var(--line, #284048)',
+          borderRadius: 16,
+          boxShadow: '0 24px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Header with glowing amber warning icon */}
+        <div style={{
+          padding: '1.75rem 1.5rem 1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            width: 60,
+            height: 60,
+            borderRadius: '50%',
+            background: 'color-mix(in srgb, var(--amber, #f59e0b) 16%, transparent)',
+            border: '2px solid color-mix(in srgb, var(--amber, #f59e0b) 48%, transparent)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--amber, #f59e0b)',
+            marginBottom: '1rem',
+            boxShadow: '0 0 28px color-mix(in srgb, var(--amber, #f59e0b) 32%, transparent)',
+          }}>
+            <AlertTriangle size={30} />
+          </div>
+
+          <h3 style={{
+            margin: '0 0 0.5rem',
+            fontSize: '1.2rem',
+            fontWeight: 800,
+            color: 'var(--ink, #edf5f6)',
+            letterSpacing: '-0.01em',
+          }}>
+            Çıkarmayı Onaylıyor musunuz?
+          </h3>
+
+          <p style={{
+            margin: 0,
+            fontSize: '0.875rem',
+            color: 'var(--muted, #9eacb6)',
+            lineHeight: 1.45,
+          }}>
+            Aşağıdaki personelin kurum ilişiği kesilecektir.
+          </p>
+        </div>
+
+        {/* User Card */}
+        <div style={{ padding: '0 1.5rem' }}>
+          <div style={{
+            background: 'var(--surface-muted, #172a31)',
+            border: '1px solid var(--line, #284048)',
+            borderRadius: 10,
+            padding: '0.875rem 1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}>
+            <span style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              background: ROLE_COLORS[user.role] || 'var(--muted)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              flexShrink: 0,
+            }}>
+              {(user.first_name || user.email || '?')[0].toUpperCase()}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--ink)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {user.title ? `${user.title} ` : ''}{user.first_name} {user.last_name}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--faint, #738590)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {user.email}
+              </div>
+            </div>
+            <span style={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              padding: '3px 8px',
+              borderRadius: 6,
+              background: `color-mix(in srgb, ${ROLE_COLORS[user.role] || 'var(--teal)'} 16%, transparent)`,
+              color: ROLE_COLORS[user.role] || 'var(--teal)',
+              border: `1px solid color-mix(in srgb, ${ROLE_COLORS[user.role] || 'var(--teal)'} 35%, transparent)`,
+              flexShrink: 0,
+            }}>
+              {ROLE_LABELS[user.role] || user.role}
+            </span>
+          </div>
+
+          {/* Attention Banner */}
+          <div style={{
+            marginTop: '0.75rem',
+            padding: '0.75rem 0.875rem',
+            background: 'color-mix(in srgb, var(--amber, #f59e0b) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--amber, #f59e0b) 30%, transparent)',
+            borderRadius: 8,
+            fontSize: '0.75rem',
+            color: 'var(--amber, #f59e0b)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            lineHeight: 1.45,
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>Önemli:</strong> Kullanıcı veritabanından silinmez; yalnızca bu kurumla bağlantısı koparılır ve bağımsız hekim/personel statüsüne geçer.
+            </span>
+          </div>
+        </div>
+
+        {/* Action Buttons: Yeşil "Evet, Çıkar", Nötr "İptal" */}
+        <div style={{
+          padding: '1.25rem 1.5rem',
+          display: 'flex',
+          gap: '0.75rem',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          marginTop: '0.5rem',
+        }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              flex: 1,
+              padding: '0.65rem 1rem',
+              background: 'var(--surface-muted, #172a31)',
+              border: '1px solid var(--line, #284048)',
+              borderRadius: 8,
+              color: 'var(--ink, #edf5f6)',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            İptal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              flex: 1.35,
+              padding: '0.65rem 1.25rem',
+              background: '#10b981',
+              border: '1px solid #059669',
+              borderRadius: 8,
+              color: '#ffffff',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 16px rgba(16, 185, 129, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.45rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {loading ? <RefreshCw size={15} className="spin" /> : <CheckCircle size={16} />}
+            <span>{loading ? 'Çıkarılıyor...' : 'Evet, Çıkar'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Kullanıcı Tablosu ────────────────────────────────────────────────────────
 
-function UsersTab({ lockedCount, isSuperAdmin }) {
+function UsersTab({ lockedCount, isSuperAdmin, session }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -832,6 +1929,7 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [orgFilter, setOrgFilter] = useState('');
   const [editingUser, setEditingUser] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [toast, setToast] = useState(null);
 
   const load = useCallback(async () => {
@@ -868,9 +1966,10 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
       }
       showToast('Kullanıcı bilgileri başarıyla güncellendi.');
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...formData } : u));
-    } catch {
-      showToast('Kullanıcı güncellenemedi.', 'danger');
-      throw new Error();
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.detail || err?.message || 'Kullanıcı güncellenemedi.';
+      showToast(msg, 'danger');
+      throw err;
     }
   };
 
@@ -909,6 +2008,33 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
     return { label: 'Aktif', color: 'var(--teal)' };
   };
 
+  const [removingUserTarget, setRemovingUserTarget] = useState(null);
+  const [removingLoading, setRemovingLoading] = useState(false);
+
+  const handleRemoveUser = async (targetUser) => {
+    setRemovingLoading(true);
+    try {
+      const orgId = targetUser.organization_id || session?.user?.organization_id || session?.user?.organizationId;
+      if (!orgId) {
+        showToast('Kullanıcının bağlı olduğu bir kurum bulunamadı.', 'danger');
+        return;
+      }
+      if (isSuperAdmin) {
+        await removeSuperAdminUserFromOrg(orgId, targetUser.id);
+      } else {
+        await removeAdminUserFromOrg(orgId, targetUser.id);
+      }
+      showToast(`${targetUser.first_name} ${targetUser.last_name} kurumdan çıkarıldı.`);
+      setRemovingUserTarget(null);
+      load();
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.detail || err?.message || 'Kullanıcı kurumdan çıkarılamadı.';
+      showToast(msg, 'danger');
+    } finally {
+      setRemovingLoading(false);
+    }
+  };
+
   const [organizations, setOrganizations] = useState([]);
 
   useEffect(() => {
@@ -941,6 +2067,19 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
         </div>
       )}
 
+      {showCreateModal && (
+        <CreateUserModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            showToast('Yeni kullanıcı başarıyla oluşturuldu.');
+            load();
+          }}
+          isSuperAdmin={isSuperAdmin}
+          organizations={organizations}
+          session={session}
+        />
+      )}
+
       {editingUser && (
         <EditUserModal
           user={editingUser}
@@ -948,7 +2087,21 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
           onSave={handleSaveUser}
           onDelete={handleDeleteUser}
           onForceLogout={handleForceLogoutUser}
+          onRemoveFromOrg={(targetUser) => {
+            setEditingUser(null);
+            setRemovingUserTarget(targetUser);
+          }}
           isSuperAdmin={isSuperAdmin}
+          organizations={organizations}
+        />
+      )}
+
+      {removingUserTarget && (
+        <RemoveUserFromOrgModal
+          user={removingUserTarget}
+          loading={removingLoading}
+          onClose={() => setRemovingUserTarget(null)}
+          onConfirm={() => handleRemoveUser(removingUserTarget)}
         />
       )}
 
@@ -958,6 +2111,30 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
         loading={loading}
         onRefresh={load}
         filters={[
+          <button
+            key="create-user-btn"
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '0.4rem 0.75rem',
+              background: 'var(--teal)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
+            }}
+            title="Sisteme yeni hekim veya personel ekle"
+          >
+            <UserPlus size={14} />
+            <span>+ Yeni Kullanıcı Ekle</span>
+          </button>,
           ...(isSuperAdmin ? [
             <SelectFilter
               key="org"
@@ -1018,9 +2195,14 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
             <tr style={{ borderBottom: '1px solid var(--line)' }}>
               {['Kullanıcı', 'Rol', 'Kurum', 'Durum', 'MFA', 'Son Giriş', 'İşlemler'].map(h => (
                 <th key={h} style={{
-                  padding: '0.625rem 0.75rem', textAlign: 'left',
-                  color: 'var(--muted)', fontWeight: 600, fontSize: '0.75rem',
+                  padding: '0.625rem 0.75rem',
+                  textAlign: h === 'İşlemler' ? 'right' : 'left',
+                  color: 'var(--muted)',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
                   whiteSpace: 'nowrap',
+                  paddingRight: h === 'İşlemler' ? '1rem' : '0.75rem',
+                  width: h === 'İşlemler' ? '1%' : (h === 'MFA' ? '60px' : 'auto'),
                 }}>{h}</th>
               ))}
             </tr>
@@ -1106,31 +2288,81 @@ function UsersTab({ lockedCount, isSuperAdmin }) {
                     {formatRelativeTime(user.last_login_at)}
                   </td>
                   {/* İşlemler */}
-                  <td style={{ padding: '0.75rem' }}>
-                    <button
-                      type="button"
-                      title="Kullanıcıyı Düzenle"
-                      onClick={() => setEditingUser(user)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.375rem',
-                        padding: '0.35rem 0.75rem',
-                        background: 'color-mix(in srgb, var(--teal) 10%, transparent)',
-                        border: '1px solid color-mix(in srgb, var(--teal) 30%, transparent)',
-                        borderRadius: 7,
-                        cursor: 'pointer',
-                        color: 'var(--teal)',
-                        fontSize: '0.75rem',
-                        fontWeight: 500,
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 20%, transparent)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 10%, transparent)'}
-                    >
-                      <Pencil size={12} />
-                      <span>Düzenle</span>
-                    </button>
+                  <td style={{ padding: '0.75rem 1rem 0.75rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap', width: '1%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.45rem' }}>
+                      <button
+                        type="button"
+                        title="Kullanıcıyı Düzenle"
+                        onClick={() => setEditingUser(user)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.38rem 0.75rem',
+                          background: 'color-mix(in srgb, var(--teal) 12%, transparent)',
+                          border: '1px solid color-mix(in srgb, var(--teal) 35%, transparent)',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          color: 'var(--teal)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 22%, transparent)';
+                          e.currentTarget.style.borderColor = 'var(--teal)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--teal) 25%, transparent)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'color-mix(in srgb, var(--teal) 12%, transparent)';
+                          e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--teal) 35%, transparent)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        <Pencil size={13} />
+                        <span>Düzenle</span>
+                      </button>
+
+                      {/* Kurumdan Çıkar Butonu (Kendisi ve Süper Admin hariç) */}
+                      {user.id !== (session?.user?.id || session?.user?.user_id) && user.role !== 'SUPER_ADMIN' && (
+                        <button
+                          type="button"
+                          title="Kullanıcıyı Kurumdan Çıkar"
+                          onClick={() => setRemovingUserTarget(user)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.38rem 0.75rem',
+                            background: 'color-mix(in srgb, var(--rose) 12%, transparent)',
+                            border: '1px solid color-mix(in srgb, var(--rose) 35%, transparent)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            color: 'var(--rose)',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = 'color-mix(in srgb, var(--rose) 22%, transparent)';
+                            e.currentTarget.style.borderColor = 'var(--rose)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--rose) 25%, transparent)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = 'color-mix(in srgb, var(--rose) 12%, transparent)';
+                            e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--rose) 35%, transparent)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <UserMinus size={13} />
+                          <span>Çıkar</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -1277,7 +2509,7 @@ function SessionsTab({ isSuperAdmin }) {
   );
 }
 
-function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin }) {
+function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin, session, organizations = [], onUserUpdated }) {
   const [formData, setFormData] = useState({
     name: org?.name || '',
     code: org?.code || '',
@@ -1287,8 +2519,16 @@ function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin }) {
   const [saving, setSaving] = useState(false);
   const [orgUsers, setOrgUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [editingOrgUser, setEditingOrgUser] = useState(null);
+  const [removingUserId, setRemovingUserId] = useState(null);
+  const [removingLoading, setRemovingLoading] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
 
-  useEffect(() => {
+  // Authorization check: SuperAdmin can manage users in any org; Admin can ONLY manage users in their own org
+  const actorOrgId = session?.user?.organization_id || session?.user?.organizationId;
+  const canManageOrgUsers = isSuperAdmin || (actorOrgId && String(actorOrgId) === String(org?.id));
+
+  const loadOrgUsers = useCallback(() => {
     if (!org?.id) return;
     setUsersLoading(true);
     const fetchUsers = isSuperAdmin
@@ -1299,6 +2539,10 @@ function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin }) {
       .catch(() => setOrgUsers([]))
       .finally(() => setUsersLoading(false));
   }, [org?.id, isSuperAdmin]);
+
+  useEffect(() => {
+    loadOrgUsers();
+  }, [loadOrgUsers]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1313,6 +2557,52 @@ function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin }) {
     }
   };
 
+  const handleSaveOrgUser = async (userId, userFormData) => {
+    if (isSuperAdmin) {
+      await patchSuperAdminUser(userId, userFormData);
+    } else {
+      await patchAdminUser(userId, userFormData);
+    }
+    loadOrgUsers();
+    if (onUserUpdated) onUserUpdated();
+  };
+
+  const handleDeleteOrgUser = async (userId) => {
+    if (isSuperAdmin) {
+      await deleteSuperAdminUser(userId);
+    } else {
+      await deleteAdminUser(userId);
+    }
+    loadOrgUsers();
+    if (onUserUpdated) onUserUpdated();
+  };
+
+  const handleForceLogoutOrgUser = async (userId) => {
+    if (isSuperAdmin) {
+      await forceLogoutSuperAdminUser(userId);
+    } else {
+      await forceLogoutAdminUser(userId);
+    }
+  };
+
+  const handleRemoveOrgUser = async (userId) => {
+    setRemovingLoading(true);
+    try {
+      if (isSuperAdmin) {
+        await removeSuperAdminUserFromOrg(org.id, userId);
+      } else {
+        await removeAdminUserFromOrg(org.id, userId);
+      }
+      setRemovingUserId(null);
+      loadOrgUsers();
+      if (onUserUpdated) onUserUpdated();
+    } catch (err) {
+      console.error('Kullanıcı kurumdan çıkarılamadı:', err);
+    } finally {
+      setRemovingLoading(false);
+    }
+  };
+
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', background: 'var(--surface-muted)',
     border: '1px solid var(--line)', borderRadius: 8, padding: '0.5rem 0.75rem',
@@ -1320,102 +2610,302 @@ function ManageOrgModal({ org, onClose, onSave, onDeactivate, isSuperAdmin }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 10000,
-      background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-    }} onClick={onClose}>
+    <>
+      {showAddUserModal && (
+        <CreateUserModal
+          onClose={() => setShowAddUserModal(false)}
+          onCreated={() => {
+            loadOrgUsers();
+            if (onUserUpdated) onUserUpdated();
+          }}
+          isSuperAdmin={isSuperAdmin}
+          organizations={organizations}
+          defaultOrgId={org?.id}
+          session={session}
+          zIndex={10060}
+        />
+      )}
+
+      {editingOrgUser && (
+        <EditUserModal
+          user={editingOrgUser}
+          onClose={() => setEditingOrgUser(null)}
+          onSave={handleSaveOrgUser}
+          onDelete={handleDeleteOrgUser}
+          onForceLogout={handleForceLogoutOrgUser}
+          isSuperAdmin={isSuperAdmin}
+          organizations={organizations}
+          zIndex={10050}
+        />
+      )}
+
       <div style={{
-        background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16,
-        boxShadow: 'var(--shadow)', width: '100%', maxWidth: 580, maxHeight: '90vh',
-        overflowY: 'auto', color: 'var(--ink)', display: 'flex', flexDirection: 'column',
-      }} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ width: 36, height: 36, borderRadius: 9, background: 'color-mix(in srgb, var(--cyan) 12%, transparent)', color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Building2 size={18} />
-            </span>
-            <div>
-              <strong style={{ fontSize: '1rem', display: 'block', color: 'var(--ink)' }}>{org?.name || 'Kurum Yönetimi'}</strong>
-              <span style={{ fontSize: '0.75rem', color: 'var(--faint)', fontFamily: 'monospace' }}>KOD: {org?.code}</span>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, background: 'transparent', border: '1px solid var(--line)', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={15} />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Adı</label>
-            <input style={inputStyle} value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Kodu</label>
-              <input style={inputStyle} value={formData.code} onChange={e => setFormData(p => ({ ...p, code: e.target.value.toUpperCase() }))} required />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Tipi</label>
-              <select style={inputStyle} value={formData.org_type || ''} onChange={e => setFormData(p => ({ ...p, org_type: e.target.value }))}>
-                <option value="">Seçiniz...</option>
-                <option value="UNIVERSITY_HOSPITAL">Üniversite Hastanesi</option>
-                <option value="RESEARCH_CENTER">Araştırma Merkezi</option>
-                <option value="PUBLIC_HOSPITAL">Kamu Hastanesi</option>
-                <option value="PRIVATE_CLINIC">Özel Klinik</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Açıklama</label>
-            <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="Kurum hakkında notlar..." />
-          </div>
-
-          {/* Kurum Kullanıcıları Listesi */}
-          <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
-            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--ink)' }}>
-              Kuruma Bağlı Kullanıcılar ({orgUsers.length})
-            </h4>
-            {usersLoading ? (
-              <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--muted)' }}><RefreshCw size={16} className="spin" /></div>
-            ) : orgUsers.length === 0 ? (
-              <div style={{ fontSize: '0.8125rem', color: 'var(--muted)' }}>Bu kuruma bağlı aktif kullanıcı bulunmuyor.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 150, overflowY: 'auto' }}>
-                {orgUsers.map(u => (
-                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0.6rem', background: 'var(--surface-muted)', borderRadius: 6, fontSize: '0.8125rem' }}>
-                    <div>
-                      <strong>{u.first_name} {u.last_name}</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--faint)', marginLeft: 8 }}>{u.email}</span>
-                    </div>
-                    <span style={{ fontSize: '0.6875rem', padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--teal) 15%, transparent)', color: 'var(--teal)' }}>
-                      {ROLE_LABELS[u.role] || u.role}
-                    </span>
-                  </div>
-                ))}
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+      }} onClick={onClose}>
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16,
+          boxShadow: 'var(--shadow)', width: '100%', maxWidth: 580, maxHeight: '90vh',
+          overflowY: 'auto', color: 'var(--ink)', display: 'flex', flexDirection: 'column',
+        }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ width: 36, height: 36, borderRadius: 9, background: 'color-mix(in srgb, var(--cyan) 12%, transparent)', color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Building2 size={18} />
+              </span>
+              <div>
+                <strong style={{ fontSize: '1rem', display: 'block', color: 'var(--ink)' }}>{org?.name || 'Kurum Yönetimi'}</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--faint)', fontFamily: 'monospace' }}>KOD: {org?.code}</span>
               </div>
-            )}
+            </div>
+            <button type="button" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, background: 'transparent', border: '1px solid var(--line)', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={15} />
+            </button>
           </div>
 
-          {/* Buttons */}
-          <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-            <button type="button" onClick={() => onDeactivate(org.id)} style={{ padding: '0.5rem 1rem', background: 'var(--danger-bg)', color: 'var(--rose)', border: '1px solid var(--rose)', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem' }}>
-              Askıya Al (Pasifleştir)
-            </button>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button type="button" onClick={onClose} style={{ padding: '0.5rem 1rem', background: 'var(--surface-muted)', border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem' }}>Kapat</button>
-              <button type="submit" disabled={saving} style={{ padding: '0.5rem 1.25rem', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 500 }}>
-                {saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
-              </button>
+          {/* Form Body */}
+          <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Adı</label>
+              <input style={inputStyle} value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} required />
             </div>
-          </div>
-        </form>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Kodu</label>
+                <input style={inputStyle} value={formData.code} onChange={e => setFormData(p => ({ ...p, code: e.target.value.toUpperCase() }))} required />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Kurum Tipi</label>
+                <select style={inputStyle} value={formData.org_type || ''} onChange={e => setFormData(p => ({ ...p, org_type: e.target.value }))}>
+                  <option value="">Seçiniz...</option>
+                  <option value="UNIVERSITY_HOSPITAL">Üniversite Hastanesi</option>
+                  <option value="RESEARCH_CENTER">Araştırma Merkezi</option>
+                  <option value="PUBLIC_HOSPITAL">Kamu Hastanesi</option>
+                  <option value="PRIVATE_CLINIC">Özel Klinik</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--muted)', marginBottom: 4 }}>Açıklama</label>
+              <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={formData.description || ''} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="Kurum hakkında notlar..." />
+            </div>
+
+            {/* Kurum Kullanıcıları Listesi */}
+            <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.625rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Users size={15} style={{ color: 'var(--teal)' }} />
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink)' }}>
+                    Kuruma Bağlı Kullanıcılar ({orgUsers.length})
+                  </span>
+                  {canManageOrgUsers && (
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--teal)', fontWeight: 500, marginLeft: 4 }}>
+                      {isSuperAdmin ? '⚡ Süper Yönetici Yetkisi' : '✓ Kurum Yöneticisi Yetkisi'}
+                    </span>
+                  )}
+                </div>
+                {canManageOrgUsers && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUserModal(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      padding: '0.25rem 0.65rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      background: 'color-mix(in srgb, var(--teal) 12%, transparent)',
+                      border: '1px solid color-mix(in srgb, var(--teal) 35%, transparent)',
+                      borderRadius: 6,
+                      color: 'var(--teal)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Bu kuruma yeni kullanıcı ekle"
+                  >
+                    <UserPlus size={12} />
+                    <span>+ Kullanıcı Ekle</span>
+                  </button>
+                )}
+              </div>
+
+              {usersLoading ? (
+                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--muted)' }}><RefreshCw size={16} className="spin" /></div>
+              ) : orgUsers.length === 0 ? (
+                <div style={{ fontSize: '0.8125rem', color: 'var(--muted)', background: 'var(--surface-muted)', padding: '0.75rem', borderRadius: 6, textAlign: 'center' }}>
+                  Bu kuruma bağlı aktif kullanıcı bulunmuyor.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 200, overflowY: 'auto' }}>
+                  {orgUsers.map(u => (
+                    <div
+                      key={u.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.5rem 0.75rem',
+                        background: 'var(--surface-muted)',
+                        borderRadius: 8,
+                        fontSize: '0.8125rem',
+                        border: '1px solid var(--line)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                        <span style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: '50%',
+                          background: ROLE_COLORS[u.role] || 'var(--teal)',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          flexShrink: 0,
+                        }}>
+                          {(u.first_name || u.email || '?')[0].toUpperCase()}
+                        </span>
+                        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--ink)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {u.title ? `${u.title} ` : ''}{u.first_name} {u.last_name}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--faint)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{u.email}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                        <span style={{
+                          fontSize: '0.6875rem',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: `color-mix(in srgb, ${ROLE_COLORS[u.role] || 'var(--teal)'} 15%, transparent)`,
+                          color: ROLE_COLORS[u.role] || 'var(--teal)',
+                          fontWeight: 500,
+                        }}>
+                          {ROLE_LABELS[u.role] || u.role}
+                        </span>
+
+                        {canManageOrgUsers && (
+                          removingUserId === u.id ? (
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              background: 'var(--danger-bg)', padding: '2px 6px',
+                              borderRadius: 6, border: '1px solid var(--rose)',
+                            }}>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--rose)', fontWeight: 600 }}>Çıkarılsın mı?</span>
+                              <button
+                                type="button"
+                                disabled={removingLoading}
+                                onClick={() => handleRemoveOrgUser(u.id)}
+                                style={{
+                                  padding: '0.2rem 0.45rem',
+                                  fontSize: '0.6875rem',
+                                  background: 'var(--rose)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {removingLoading ? '...' : 'Evet'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRemovingUserId(null)}
+                                style={{
+                                  padding: '0.2rem 0.45rem',
+                                  fontSize: '0.6875rem',
+                                  background: 'var(--surface)',
+                                  border: '1px solid var(--line)',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  color: 'var(--muted)',
+                                }}
+                              >
+                                İptal
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <button
+                                type="button"
+                                onClick={() => setRemovingUserId(u.id)}
+                                style={{
+                                  padding: '0.25rem 0.55rem',
+                                  fontSize: '0.75rem',
+                                  background: 'color-mix(in srgb, var(--rose) 10%, transparent)',
+                                  border: '1px solid color-mix(in srgb, var(--rose) 30%, transparent)',
+                                  borderRadius: 6,
+                                  cursor: 'pointer',
+                                  color: 'var(--rose)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  fontWeight: 500,
+                                  transition: 'all 0.15s',
+                                }}
+                                title="Kullanıcıyı bu kurumdan çıkar"
+                              >
+                                <UserMinus size={11} />
+                                <span>Çıkar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingOrgUser({
+                                  ...u,
+                                  organization_name: org.name,
+                                  organization_code: org.code,
+                                })}
+                                style={{
+                                  padding: '0.25rem 0.45rem',
+                                  fontSize: '0.75rem',
+                                  background: 'var(--surface)',
+                                  border: '1px solid var(--line)',
+                                  borderRadius: 6,
+                                  cursor: 'pointer',
+                                  color: 'var(--muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  transition: 'all 0.15s',
+                                }}
+                                title="Kullanıcı bilgilerini düzenle"
+                              >
+                                <Pencil size={11} />
+                                <span>Düzenle</span>
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div style={{ borderTop: '1px solid var(--line)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+              <button type="button" onClick={() => onDeactivate(org.id)} style={{ padding: '0.5rem 1rem', background: 'var(--danger-bg)', color: 'var(--rose)', border: '1px solid var(--rose)', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem' }}>
+                Askıya Al (Pasifleştir)
+              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" onClick={onClose} style={{ padding: '0.5rem 1rem', background: 'var(--surface-muted)', border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem' }}>Kapat</button>
+                <button type="submit" disabled={saving} style={{ padding: '0.5rem 1.25rem', background: 'var(--teal)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 500 }}>
+                  {saving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1473,7 +2963,7 @@ function CreateOrgModal({ onClose, onCreate }) {
 
 // ─── Organizasyonlar Sekmesi ──────────────────────────────────────────────────
 
-function OrganizationsTab({ isSuperAdmin }) {
+function OrganizationsTab({ isSuperAdmin, session }) {
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -1511,13 +3001,16 @@ function OrganizationsTab({ isSuperAdmin }) {
 
   const handleSaveOrg = async (orgId, formData) => {
     try {
-      if (isSuperAdmin) await patchSuperAdminOrganization(orgId, formData);
-      else await patchAdminOrganization(orgId, formData);
-      alert("Kurum bilgileri başarıyla güncellendi.");
-      load();
-    } catch {
+      if (isSuperAdmin) {
+        await patchSuperAdminOrganization(orgId, formData);
+        alert("Kurum bilgileri başarıyla güncellendi.");
+        load();
+      } else {
+        alert("Kurum bilgisi güncelleme yetkisi sadece SuperAdmin hesabına aittir.");
+      }
+    } catch (err) {
       alert("Kurum güncellenemedi.");
-      throw new Error();
+      throw new Error("Kurum güncellenemedi.", { cause: err });
     }
   };
 
@@ -1528,7 +3021,7 @@ function OrganizationsTab({ isSuperAdmin }) {
       load();
     } catch (err) {
       alert(err?.detail || "Kurum eklenemedi.");
-      throw new Error();
+      throw new Error(err?.detail || "Kurum eklenemedi.", { cause: err });
     }
   };
 
@@ -1554,6 +3047,9 @@ function OrganizationsTab({ isSuperAdmin }) {
           onSave={handleSaveOrg}
           onDeactivate={handleDeactivate}
           isSuperAdmin={isSuperAdmin}
+          session={session}
+          organizations={orgs}
+          onUserUpdated={load}
         />
       )}
 
@@ -2424,9 +3920,9 @@ export default function AdminDashboard({ session, onBack, theme, setTheme }) {
         }}>
           <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
-          {activeTab === 'users' && <UsersTab lockedCount={stats?.locked_users} isSuperAdmin={isSuperAdmin} />}
+          {activeTab === 'users' && <UsersTab lockedCount={stats?.locked_users} isSuperAdmin={isSuperAdmin} session={session} />}
           {activeTab === 'sessions' && <SessionsTab isSuperAdmin={isSuperAdmin} />}
-          {activeTab === 'organizations' && <OrganizationsTab isSuperAdmin={isSuperAdmin} />}
+          {activeTab === 'organizations' && <OrganizationsTab isSuperAdmin={isSuperAdmin} session={session} />}
           {activeTab === 'audit' && <AuditLogTab isSuperAdmin={isSuperAdmin} />}
           {activeTab === 'self-settings' && <AdminSelfSettingsTab session={session} />}
         </div>

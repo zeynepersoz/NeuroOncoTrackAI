@@ -1,9 +1,9 @@
-import { Activity, Database, Eye, FileText, FlaskConical, Settings } from 'lucide-react';
+import { Activity, Database, Eye, FileText, FlaskConical, History, Settings } from 'lucide-react';
 
-export const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+export const API_BASE = import.meta?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 export const API_V1_BASE = `${API_BASE}/api/v1`;
-export const AI_SERVICE_BASE = import.meta.env.VITE_AI_SERVICE_URL || 'http://127.0.0.1:8100';
-export const API_MODE = import.meta.env.VITE_API_MODE || 'contract';
+export const AI_SERVICE_BASE = import.meta?.env?.VITE_AI_SERVICE_URL || 'http://127.0.0.1:8100';
+export const API_MODE = import.meta?.env?.VITE_API_MODE || 'contract';
 
 export const MIN_ANALYSIS_LOADER_MS = 1850;
 export const REAL_SESSION_MINUTES = 30;
@@ -85,6 +85,7 @@ export const loginMetrics = [
 
 export const workspaceTabs = [
   { id: 'overview', label: 'Klinik görünüm', icon: Activity, permission: permissions.aiViewResult },
+  { id: 'history', label: 'AI Geçmişi', icon: History, permission: permissions.aiViewResult },
   { id: 'pipeline', label: 'Ön işleme', icon: Settings, permission: permissions.studyRead },
   { id: 'biopsy', label: 'Sanal biyopsi', icon: FlaskConical, permission: permissions.aiRunBiopsy },
   { id: 'xai', label: 'Açıklanabilirlik', icon: Eye, permission: permissions.aiRunXai },
@@ -97,6 +98,11 @@ export const moduleLoaderText = {
     eyebrow: 'Klinik görünüm',
     title: 'Karar ekranı hazırlanıyor',
     detail: 'MRG, ön tanı ve takip özeti klinik görünüme yerleşiyor.',
+  },
+  history: {
+    eyebrow: 'AI Geçmişi',
+    title: 'Kalıcı kayıtlar yükleniyor',
+    detail: 'Bu vakaya ait PostgreSQL üzerindeki tüm analiz ve rapor kayıtları getiriliyor.',
   },
   pipeline: {
     eyebrow: 'Ön işleme',

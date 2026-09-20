@@ -1,0 +1,11 @@
+Takip aralığı tümör tipi ve risk düzeyine göre belirlenir. Düşük riskli/benign lezyonlarda daha uzun aralıklı görüntüleme (örneğin aylar), yüksek riskli veya hızlı büyüyen lezyonlarda daha sık takip ve multidisipliner tümör konseyi (MDT) değerlendirmesi uygundur.
+
+Tümör hacmindeki değişim, takipte objektif bir ölçüttür. Ardışık incelemelerde aynı segmentasyon yöntemiyle ölçülen hacim, büyüme/gerileme değerlendirmesini standartlaştırır.
+
+Histopatolojik doku sınıflandırması, radyolojik ön tanının doku düzeyinde doğrulanmasına katkı sağlar. Kolorektal histopatolojide dokular dokuz sınıfa ayrılır: tümör epiteli (TUM), kanser ilişkili stroma (STR), lenfositler (LYM), normal mukoza (NORM), müsin (MUC), düz kas (MUS), yağ dokusu (ADI), debris (DEB) ve arka plan (BACK).
+
+Histopatolojide tümör epiteli (TUM) oranı ve kanser ilişkili stromanın (STR) dağılımı, tümör mikroçevresi hakkında bilgi verir. Yüksek duyarlılıkla tümör epitelinin saptanması, otomatik doku analizinde öncelikli hedeftir.
+
+Yapay zeka destekli tüm çıktılar (sınıflandırma, segmentasyon, histopatoloji, rapor) klinik karar destek amaçlıdır; kesin tanı ve tedavi kararı yetkili hekim tarafından, hasta bağlamı ve ek tetkiklerle birlikte verilir.
+
+Hasta mahremiyeti esastır: kişisel sağlık verileri (KVKK kapsamında) yalnızca de-identifiye edilmiş biçimde ve yerel doğrulama amacıyla kullanılmalı, model eğitimi veya dış servislere aktarım için kullanılmamalıdır.

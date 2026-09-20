@@ -71,7 +71,7 @@ export async function syncReportToFhir(reportId) {
  * @param {object} [patientInfo]  — { name, age, gender }
  * @returns {object} — { patient, imaging_study, observations, diagnostic_report, care_plan }
  */
-export function buildLocalFhirBundle(analysisResult, patientInfo = {}) {
+export function buildLocalFhirBundle(analysisResult) {
   const fhir = analysisResult?.fhir || {};
   const pipeline = analysisResult?._pipeline;
 

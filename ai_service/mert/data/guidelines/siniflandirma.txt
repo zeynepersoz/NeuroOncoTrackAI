@@ -1,0 +1,9 @@
+Beyin MR sınıflandırmasında dört ana kategori değerlendirilir: gliom, menenjiyom, hipofiz adenomu ve tümör yok (normal). Ayırıcı tanı lezyonun konumu, sinyal özellikleri ve kontrastlanma paterniyle desteklenir.
+
+Gliomlar intra-aksiyel (beyin parankimi içi) yerleşimlidir, sınırları belirsiz olabilir ve çevresel ödemle birlikte görülür. Menenjiyomlar ekstra-aksiyel, dural tabanlı ve keskin sınırlıdır. Hipofiz adenomları sellar/suprasellar bölgeye lokalizedir.
+
+Yapay zeka sınıflandırıcısının güven skoru düşük olduğunda (örneğin %60 altı), sonuç tek başına tanısal kabul edilmemeli; ek modaliteler, klinik korelasyon ve uzman radyolog değerlendirmesi önerilir.
+
+Sınıflandırma modeli tek kesit (2D) üzerinden çalıştığında, tümör hacmi hesaplanamaz; hacimsel değerlendirme için 3B hacim (NIfTI) ve segmentasyon gereklidir. Tek kesit sonucu bir ön tarama olarak yorumlanmalıdır.
+
+Model çıktısındaki olasılık dağılımı, ayırıcı tanıda ikinci ve üçüncü olasılıkların da dikkate alınmasını sağlar; yakın olasılıklar tanısal belirsizliğe işaret eder.

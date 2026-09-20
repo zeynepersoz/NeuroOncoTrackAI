@@ -1,0 +1,11 @@
+Menenjiyomlar meninkslerden (araknoid kap hücreleri) köken alan, çoğunlukla ekstra-aksiyel ve iyi huylu tümörlerdir. Erişkinlerde en sık görülen primer intrakraniyal tümör grubundandır.
+
+Menenjiyomlar üç dereceye ayrılır: Grade I (tipik, benign, olguların çoğunluğu), Grade II (atipik, artmış nüks riski) ve Grade III (anaplastik/malign, agresif). Derece histopatoloji ile belirlenir; mitoz sayısı, beyin invazyonu ve hücresel atipi derecelendirmede rol oynar.
+
+Manyetik rezonansta menenjiyomlar T1 kontrast sonrası genellikle homojen ve belirgin kontrast tutar. "Dural kuyruk" (dural tail) bulgusu karakteristiktir ancak spesifik değildir. Kitle geniş tabanla duraya oturur ve beyni dıştan iter.
+
+Menenjiyom yönetimi tümör boyutu, konumu, büyüme hızı ve semptomlara göre belirlenir. Küçük, asemptomatik lezyonlarda seri görüntüleme ile izlem uygundur; semptomatik veya büyüyen lezyonlarda cerrahi rezeksiyon esastır. Rezeksiyon tamlığı Simpson derecesi ile sınıflandırılır ve nüks riskiyle ilişkilidir.
+
+Menenjiyomda tümör hacmi ve büyüme hızı, radyoterapi veya cerrahi kararında önemli parametrelerdir. Hacim takibi, ardışık MR incelemelerinde segmentasyon temelli ölçümle daha nesnel değerlendirilir.
+
+BraTS-MEN-RT gibi radyoterapi planlama veri setlerinde hedef hacim olarak GTV (gross tumor volume) segmentlenir; bu, kontrast tutan tümör kitlesini kapsar ve radyoterapi doz planının temelini oluşturur.

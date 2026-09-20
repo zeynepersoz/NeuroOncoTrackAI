@@ -1,28 +1,90 @@
-# Environment and secrets
+# ==============================================================================
+# NeuroOncoTrack-AI Backend .gitignore
+# ==============================================================================
+
+# Environment & Secrets
 .env
+.env.*
+*.env
+!.env.example
+!.env.*.example
 *.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.pub
+id_rsa*
 keys/
 test_keys/
+secrets/
 
-# Python / Virtual Environment
-venv/
-env/
-ENV/
+# Python & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+conda/
 
-# Testing & Coverage
+# Packaging & Distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing & Quality
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.tox/
+.nox/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Databases & Runtime Storage
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite3-journal
+storage/
+uploads/
+media/
+temp/
+tmp/
+logs/
+*.log
 
 # IDE & OS
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
+*.swp
+*.swo
+*.sw?
+*~
+*.bak
 .DS_Store
 Thumbs.db
+[Dd]esktop.ini

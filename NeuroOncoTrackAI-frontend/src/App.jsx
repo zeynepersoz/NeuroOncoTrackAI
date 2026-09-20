@@ -5,6 +5,8 @@ import {
   CheckCircle,
   Cpu,
   Database,
+  Eye,
+  EyeOff,
   KeyRound,
   Lock,
   Mail,
@@ -303,7 +305,7 @@ function ChangePasswordScreen({ onSuccess, onBack }) {
 
 // ─── Parola Sıfırlama Ekranı ──────────────────────────────────────────────────
 
-function ForgotPasswordScreen({ onBack }) {
+function ForgotPasswordScreen({ onBack, onGoToSetPassword }) {
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -373,9 +375,30 @@ function ForgotPasswordScreen({ onBack }) {
           </div>
         ) : step === 'request' ? (
           <form className="login-panel" onSubmit={handleRequest}>
-            <p style={{ marginBottom: '1rem', opacity: 0.75, fontSize: '0.875rem' }}>
+            <p style={{ marginBottom: '0.75rem', opacity: 0.75, fontSize: '0.875rem' }}>
               Kayıtlı e-posta adresinizi girin; sıfırlama bağlantısı göndereceğiz.
             </p>
+            {onGoToSetPassword && (
+              <div style={{ marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-2, #94a3b8)' }}>
+                Yöneticinizden ilk kurulum kodu mu aldınız?{' '}
+                <button
+                  type="button"
+                  onClick={onGoToSetPassword}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary, #00e5ff)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    textDecoration: 'underline',
+                    fontSize: 'inherit',
+                    fontWeight: 600,
+                  }}
+                >
+                  Şifrenizi buradan belirleyin
+                </button>
+              </div>
+            )}
             {success && (
               <div className="form-alert success" role="status">
                 <CheckCircle size={18} />
@@ -462,6 +485,257 @@ function ForgotPasswordScreen({ onBack }) {
           </form>
         )}
       </section>
+      <section className="visual-side visual-abstract" aria-hidden="true">
+        <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+        <div className="visual-scrim" aria-hidden="true" />
+      </section>
+    </main>
+  );
+}
+
+// ─── İlk Parola Belirleme Ekranı (Zero-Knowledge Setup Token) ─────────────────
+
+function SetPasswordScreen({ onBack, onSuccess, defaultToken = '' }) {
+  const [token, setToken] = useState(defaultToken);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  // Parola güvenlik kriterleri
+  const hasMinLength = newPassword.length >= 12;
+  const hasUpper = /[A-Z]/.test(newPassword);
+  const hasLower = /[a-z]/.test(newPassword);
+  const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
+  const isStrong = hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
+  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!token.trim()) {
+      setError('Lütfen kurum yöneticinizden aldığınız kurulum kodunu (setup token) girin.');
+      return;
+    }
+    if (!hasMinLength) {
+      setError('Parola en az 12 karakter uzunluğunda olmalıdır.');
+      return;
+    }
+    if (!isStrong) {
+      setError('Parola en az 1 büyük harf, 1 küçük harf, 1 rakam ve 1 özel karakter içermelidir.');
+      return;
+    }
+    if (!passwordsMatch) {
+      setError('Girdiğiniz parolalar birbiriyle uyuşmuyor.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await resetPassword(token.trim(), newPassword);
+      setSuccess(true);
+    } catch (err) {
+      setError(
+        err?.detail ||
+          err?.message ||
+          'Parola belirlenemedi. Kurulum kodu geçersiz veya 24 saatlik süresi dolmuş olabilir.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="login-shell">
+      <section className="auth-side" aria-labelledby="sp-title">
+        <header className="brand-row">
+          <div>
+            <strong>NeuroOncoTrack-AI</strong>
+            <span>Güvenli İlk Parola Kurulumu</span>
+          </div>
+        </header>
+
+        <div className="auth-heading-row">
+          <div className="auth-copy">
+            <span className="eyebrow">Hesap Kurulumu</span>
+            <h1 id="sp-title">Şifremi Belirle</h1>
+          </div>
+        </div>
+
+        {success ? (
+          <div className="login-panel">
+            <div className="form-alert success" role="status">
+              <CheckCircle size={18} />
+              <span>
+                Parolanız başarıyla oluşturuldu ve hesabınız aktifleştirildi! Artık yeni parolanızla güvenli giriş yapabilirsiniz.
+              </span>
+            </div>
+            <div className="action-row" style={{ marginTop: '1.5rem' }}>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() => (onSuccess ? onSuccess() : onBack())}
+              >
+                <CheckCircle size={18} />
+                Giriş Ekranına Git
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form className="login-panel" onSubmit={handleSubmit}>
+            <p style={{ marginBottom: '1rem', color: 'var(--text-2, #a0aec0)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+              Kurum yöneticinizin size sağladığı <strong>tek kullanımlık kurulum kodunu (setup_token)</strong> ve kullanmak istediğiniz güçlü parolayı girin.
+            </p>
+
+            <label className="field-group">
+              <span>Kurulum Kodu (Setup Token) *</span>
+              <div className="input-shell">
+                <KeyRound size={18} />
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Yöneticinizin verdiği tek kullanımlık kod"
+                  required
+                  autoFocus
+                  style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                />
+              </div>
+            </label>
+
+            <label className="field-group">
+              <span>Yeni Parola *</span>
+              <div className="input-shell" style={{ gridTemplateColumns: '22px 1fr 24px', alignItems: 'center' }}>
+                <Lock size={18} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="En az 12 karakter"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted, #94a3b8)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title={showPassword ? 'Gizle' : 'Göster'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
+
+            <label className="field-group">
+              <span>Yeni Parola (Tekrar) *</span>
+              <div className="input-shell" style={{ gridTemplateColumns: '22px 1fr 24px', alignItems: 'center' }}>
+                <Lock size={18} />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Parolayı tekrar girin"
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--muted, #94a3b8)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title={showConfirmPassword ? 'Gizle' : 'Göster'}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
+
+            {/* Şifre Güvenlik Kriterleri İpuçları */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--line, rgba(255,255,255,0.08))',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              fontSize: '0.75rem',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '0.35rem',
+              color: 'var(--text-2, #a0aec0)',
+              marginBottom: '0.5rem',
+            }}>
+              <span style={{ color: hasMinLength ? '#10b981' : 'inherit' }}>
+                {hasMinLength ? '✓' : '○'} En az 12 karakter
+              </span>
+              <span style={{ color: hasUpper ? '#10b981' : 'inherit' }}>
+                {hasUpper ? '✓' : '○'} Büyük harf (A-Z)
+              </span>
+              <span style={{ color: hasLower ? '#10b981' : 'inherit' }}>
+                {hasLower ? '✓' : '○'} Küçük harf (a-z)
+              </span>
+              <span style={{ color: hasNumber ? '#10b981' : 'inherit' }}>
+                {hasNumber ? '✓' : '○'} Rakam (0-9)
+              </span>
+              <span style={{ color: hasSpecial ? '#10b981' : 'inherit' }}>
+                {hasSpecial ? '✓' : '○'} Özel karakter (!@#$%...)
+              </span>
+              <span style={{ color: passwordsMatch ? '#10b981' : (confirmPassword ? '#ef4444' : 'inherit') }}>
+                {passwordsMatch ? '✓ Parolalar eşleşti' : (confirmPassword ? '✕ Eşleşmiyor' : '○ Parola onayı')}
+              </span>
+            </div>
+
+            {error && (
+              <div className="form-alert error" role="alert">
+                <ShieldAlert size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="action-row">
+              <button className="primary-action" type="submit" disabled={loading || !isStrong || !passwordsMatch}>
+                {loading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
+                {loading ? 'Kaydediliyor...' : 'Parolayı Belirle & Aktifleştir'}
+              </button>
+              <button className="secondary-action" type="button" onClick={onBack}>
+                <ArrowLeft size={18} />
+                Giriş Ekranına Dön
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="compliance-strip" aria-label="Güvenlik bilgisi">
+          <span>
+            <ShieldCheck size={16} />
+            Argon2id Kriptografik Özet
+          </span>
+          <span>
+            <KeyRound size={16} />
+            Tek Kullanımlık Token
+          </span>
+        </div>
+      </section>
+
       <section className="visual-side visual-abstract" aria-hidden="true">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
@@ -743,9 +1017,13 @@ function App() {
   const [idleWarning, setIdleWarning] = useState(false);
   const idleTimersRef = useRef({ warning: null, logout: null });
 
-  // Ekran durumu: 'welcome' | 'login' | 'mfa' | 'change-password' | 'forgot-password' | 'register'
+  // Ekran durumu: 'welcome' | 'login' | 'mfa' | 'change-password' | 'forgot-password' | 'set-password' | 'register'
   const [screen, setScreen] = useState(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('setup_token') || params.get('token')) {
+        return 'set-password';
+      }
       const savedSession = window.localStorage.getItem('neuro_session');
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
@@ -758,6 +1036,14 @@ function App() {
       console.error(e);
     }
     return 'welcome';
+  });
+  const [initialSetupToken, setInitialSetupToken] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('setup_token') || params.get('token') || '';
+    } catch {
+      return '';
+    }
   });
   const [mfaState, setMfaState] = useState(null);
 
@@ -855,6 +1141,9 @@ function App() {
 
       setIdleWarning(false);
       setSession(nextSession);
+      const userRole = nextSession?.user?.role;
+      const isAdminRole = ['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(userRole);
+      setScreen(isAdminRole ? 'admin' : 'workspace');
     } catch (error) {
       setStatus({
         tone: 'error',
@@ -981,7 +1270,9 @@ function App() {
         mfaState={mfaState}
         onSuccess={(sess) => {
           setSession(sess);
-          setScreen('welcome');
+          const userRole = sess?.user?.role;
+          const isAdminRole = ['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(userRole);
+          setScreen(isAdminRole ? 'admin' : 'workspace');
           setMfaState(null);
         }}
         onBack={() => {
@@ -1002,7 +1293,28 @@ function App() {
   }
 
   if (screen === 'forgot-password') {
-    return <ForgotPasswordScreen onBack={() => setScreen('login')} />;
+    return (
+      <ForgotPasswordScreen
+        onBack={() => setScreen('login')}
+        onGoToSetPassword={() => setScreen('set-password')}
+      />
+    );
+  }
+
+  if (screen === 'set-password') {
+    return (
+      <SetPasswordScreen
+        defaultToken={initialSetupToken}
+        onBack={() => setScreen('login')}
+        onSuccess={() => {
+          setScreen('login');
+          setStatus({
+            tone: 'success',
+            message: 'Parolanız başarıyla belirlendi! Yeni parolanızla giriş yapabilirsiniz.',
+          });
+        }}
+      />
+    );
   }
 
   if (screen === 'register') {
@@ -1178,12 +1490,13 @@ function App() {
               {authLoading ? 'Oturum açılıyor' : 'Güvenli giriş'}
             </button>
             <button
-              className={`secondary-action ${isDemoMode ? 'active' : ''}`}
+              className="secondary-action"
               type="button"
-              onClick={toggleDemoAccess}
+              onClick={() => setScreen('set-password')}
+              title="Kurum yöneticinizden aldığınız kurulum kodu ile ilk parolanızı belirleyin"
             >
-              <Activity size={18} />
-              {isDemoMode ? "Demo'dan çık" : 'Demo erişimi'}
+              <KeyRound size={18} />
+              Şifremi Belirle
             </button>
           </div>
         </form>

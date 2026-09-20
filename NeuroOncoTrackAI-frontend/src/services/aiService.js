@@ -38,6 +38,7 @@ async function aiRequest(path, options = {}) {
   } catch (error) {
     throw new Error(
       `AI servisine ulaşılamadı (${AI_SERVICE_BASE}): ${error.message}`,
+      { cause: error },
     );
   }
 
@@ -186,6 +187,45 @@ export async function generateAiReport({
       guidelines_dir: guidelinesDir || null,
     },
   });
+}
+
+// ─── Backend Gateway Entegrasyonu (POST /api/v1/ai/classify) ──────────────────
+
+/**
+ * Backend AI Gateway üzerinden güvenli sınıflandırma çalıştır — POST /api/v1/ai/classify
+ *
+ * @param {object} params
+ * @param {string} params.patientId
+ * @param {object} params.modalityPaths
+ * @param {string} [params.mode='fast']
+ * @param {string} [params.device='auto']
+ * @param {string} [params.predictor='v3']
+ * @param {object} [params.extraFeatures]
+ * @param {AbortSignal} [params.signal]
+ */
+export async function classifyWithBackend({
+  patientId,
+  modalityPaths,
+  mode = 'fast',
+  device = 'auto',
+  predictor = 'v3',
+  extraFeatures = null,
+  signal,
+} = {}) {
+  const { apiClient } = await import('./apiClient.js');
+
+  const payload = {
+    patient_id: patientId || `PATIENT-${Date.now()}`,
+    modality_paths: modalityPaths || { t1c: 'scans/t1c.nii.gz' },
+    mode,
+    device,
+    predictor,
+  };
+  if (extraFeatures) {
+    payload.extra_features = extraFeatures;
+  }
+
+  return apiClient.post('/ai/classify', payload, { signal });
 }
 
 // ─── Bağlantı Testi ───────────────────────────────────────────────────────────

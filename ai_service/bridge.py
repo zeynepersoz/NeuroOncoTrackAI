@@ -302,13 +302,16 @@ _RAG_PIPELINE_CACHE: dict = {}
 
 
 def _get_or_build_rag(groq_api_key: str, guidelines_dir: Path):
-    key = f"{guidelines_dir}::{groq_api_key[:6]}"
+    # LLM-A (taslak) modeli env'den: bu hesapta llama-3.3 yok, gpt-oss-120b var.
+    model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    key = f"{guidelines_dir}::{groq_api_key[:6]}::{model_name}"
     if key in _RAG_PIPELINE_CACHE:
         return _RAG_PIPELINE_CACHE[key]
     from core.end_to_end import NeuroOncoTrackPipeline  # type: ignore
     pipe = NeuroOncoTrackPipeline(
         groq_api_key=groq_api_key,
         guidelines_dir=guidelines_dir,
+        model_name=model_name,
     )
     _RAG_PIPELINE_CACHE[key] = pipe
     return pipe

@@ -67,6 +67,9 @@ def sanitize_audit_details(details: dict[str, Any] | None) -> dict[str, Any]:
 async def _persist_audit_log_to_db(audit_obj: AuditLog) -> None:
     """Helper to persist audit log object to DB via session maker when no active DB session was passed."""
     try:
+        from app.core.config import settings
+        if settings.APP_ENV == "test":
+            return
         from app.db.session import async_session_factory
         if async_session_factory:
             async with async_session_factory() as session:

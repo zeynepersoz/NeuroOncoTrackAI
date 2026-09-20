@@ -28,8 +28,6 @@ import {
 import {
   apiClient,
   clearAccessToken,
-  isEndpointUnavailable,
-  isNetworkUnavailable,
   setAccessToken,
 } from './apiClient.js';
 
@@ -137,7 +135,6 @@ export async function login({
   institutionCode,
   email,
   password,
-  rememberStation,
   demo = false,
 }) {
   if (demo) {
@@ -145,37 +142,33 @@ export async function login({
     return buildLocalSession({ institutionCode, email, mode: 'demo' });
   }
 
-  try {
-    // Backend LoginRequest: sadece email + password kabul ediyor
-    // institution_code ve remember_station backend şemasında YOK
-    const payload = await apiClient.post(
-      '/auth/login',
-      { email, password },
-      { auth: false },
-    );
+  // Backend LoginRequest: sadece email + password kabul ediyor
+  // institution_code ve remember_station backend şemasında YOK
+  const payload = await apiClient.post(
+    '/auth/login',
+    { email, password },
+    { auth: false },
+  );
 
-    // HTTP 202 — MFA gerekli
-    if (payload?.mfa_required || payload?.mfa_temp_token || payload?.temporary_token) {
-      return {
-        mode: 'mfa',
-        temporaryToken:
-          payload.mfa_temp_token || payload.temporary_token,
-        user: { ...DEFAULT_CLINICAL_USER, email, institutionCode },
-      };
-    }
-
-    // Parola değişimi zorunlu
-    if (payload?.password_change_required || payload?.must_change_password) {
-      return {
-        mode: 'password-change',
-        user: { ...DEFAULT_CLINICAL_USER, email, institutionCode },
-      };
-    }
-
-    return normalizeSession(payload, { email, institutionCode });
-  } catch (error) {
-    throw error;
+  // HTTP 202 — MFA gerekli
+  if (payload?.mfa_required || payload?.mfa_temp_token || payload?.temporary_token) {
+    return {
+      mode: 'mfa',
+      temporaryToken:
+        payload.mfa_temp_token || payload.temporary_token,
+      user: { ...DEFAULT_CLINICAL_USER, email, institutionCode },
+    };
   }
+
+  // Parola değişimi zorunlu
+  if (payload?.password_change_required || payload?.must_change_password) {
+    return {
+      mode: 'password-change',
+      user: { ...DEFAULT_CLINICAL_USER, email, institutionCode },
+    };
+  }
+
+  return normalizeSession(payload, { email, institutionCode });
 }
 
 // ─── AUTH: Çıkış ─────────────────────────────────────────────────────────────

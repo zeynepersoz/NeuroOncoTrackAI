@@ -1,24 +1,71 @@
-# Logs
-logs
+# ==============================================================================
+# NeuroOncoTrack-AI Frontend .gitignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+
+# Production build outputs
+dist/
+dist-ssr/
+build/
+
+# Vite, caches & tool artifacts
+.vite/
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Environment variables & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+!.env.*.example
+
+# Logs & Diagnostic outputs
+logs/
 *.log
+*.log*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+lint_errors.txt
+lint*.txt
+*lint_errors*.txt
 
-node_modules
-dist
-dist-ssr
-*.local
+# Testing & Coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
 
-# Editor directories and files
+# IDE & Editor files
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
+*.bak
+
+# Operating System files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/

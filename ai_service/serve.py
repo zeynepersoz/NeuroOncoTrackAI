@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, File, UploadFile
     from pydantic import BaseModel, Field
 except ImportError as exc:  # pragma: no cover
     raise SystemExit(
@@ -139,13 +139,88 @@ def _infer(req: InferRequest):
 @app.post("/report")
 def _report(req: ReportRequest):
     try:
-        return generate_report_only(
+        # LLM-A: RAG taslağı (gpt-oss-120b)
+        draft = generate_report_only(
             model_output=req.model_output,
             groq_api_key=req.groq_api_key,
             guidelines_dir=req.guidelines_dir,
         )
+        # LLM-B: bağımsız ikinci görüş / doğrulama (gpt-oss-20b) — env ile kapatılabilir
+        if os.environ.get("DUAL_LLM", "1") != "0":
+            try:
+                try:
+                    from report_dual import add_second_opinion  # zeynep/ sys.path'te (bridge ekler)
+                except ModuleNotFoundError:
+                    from zeynep.report_dual import add_second_opinion
+                draft = add_second_opinion(
+                    model_output=req.model_output,
+                    draft_payload=draft,
+                    groq_api_key=req.groq_api_key,
+                )
+            except Exception as exc:  # ikinci görüş kritik değil; taslağı bozma
+                print(f"[serve] dual-LLM ikinci görüş atlandı: {exc}")
+        return draft
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"report_error: {exc}")
+
+
+# TR etiketleri (4-sınıf Kaggle sınıflandırıcı)
+_CLASS_TR = {
+    "glioma": "Gliom", "meningioma": "Menenjiyom",
+    "notumor": "Tümör Yok", "pituitary": "Hipofiz",
+}
+
+
+@app.post("/classify")
+async def _classify(file: UploadFile = File(...)):
+    """2D beyin MR görüntüsü (jpg/png) → 4-sınıf tahmin.
+
+    /infer NIfTI (3D BraTS) bekler; bu endpoint tek dilim 2D görüntü için.
+    """
+    import numpy as np
+    import cv2
+    from v3_predictor import predict_v3  # zeynep/ sys.path'te (bridge ekler)
+
+    data = await file.read()
+    arr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if arr is None:
+        raise HTTPException(status_code=400, detail="Görüntü çözülemedi.")
+    try:
+        r = predict_v3(arr)
+        pred = r["prediction"]
+        return {
+            "prediction": pred,
+            "prediction_tr": _CLASS_TR.get(pred, pred),
+            "confidence": r.get("confidence", max(r["probabilities"].values())),
+            "probabilities": r["probabilities"],
+            "model_id": r.get("model_id", "v3_rf_hgb_kaggle4"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"classify_error: {exc}")
+
+
+@app.post("/classify_viz")
+async def _classify_viz(file: UploadFile = File(...)):
+    """2D görüntü → sınıflandırma + ön işleme adımları + occlusion saliency ısı haritası.
+
+    Dönen images: original, stripped, corrected, normalized, gradcam, overlay (base64 JPEG).
+    Referans vakalarda çalışma alanı sekmeleri boş kalmasın diye.
+    """
+    import numpy as np
+    import cv2
+    try:
+        from classify_viz import classify_with_viz  # zeynep/ sys.path'te
+    except ModuleNotFoundError:
+        from zeynep.classify_viz import classify_with_viz
+
+    data = await file.read()
+    arr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if arr is None:
+        raise HTTPException(status_code=400, detail="Görüntü çözülemedi.")
+    try:
+        return classify_with_viz(arr)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"classify_viz_error: {exc}")
 
 
 if __name__ == "__main__":

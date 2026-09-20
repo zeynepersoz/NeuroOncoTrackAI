@@ -1,0 +1,107 @@
+# ==============================================================================
+# NeuroOncoTrack-AI AI Service .gitignore
+# ==============================================================================
+
+# Environment & Secrets
+.env
+.env.*
+*.env
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.cert
+*.crt
+keys/
+secrets/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+conda/
+
+# Packaging & Distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing & Quality
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Large Medical Imaging Datasets & Scans (prevent raw dataset upload)
+*.nii
+*.nii.gz
+*.dcm
+*.dicom
+*.mha
+*.mhd
+data/raw/
+data/scans/
+datasets/
+
+# AI Checkpoints, Weights & Large Artifacts
+# (Existing committed models in zeynep/finetuned_models/ and finetuned_models_kaggle/
+# will remain tracked; this rule prevents accidental commits of massive weights)
+checkpoints/
+weights/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# ML Experiment Tracking & Vector DBs
+wandb/
+mlruns/
+mlartifacts/
+lightning_logs/
+runs/
+chroma_db/
+faiss_index/
+*.faiss
+*.index
+
+# Local outputs & temporary files
+.cache/
+temp/
+tmp/
+logs/
+*.log
+
+# IDE & OS
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.sw?
+*~
+*.bak
+.DS_Store
+Thumbs.db
+[Dd]esktop.ini

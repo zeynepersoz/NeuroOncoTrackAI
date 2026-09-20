@@ -8,8 +8,8 @@ import {
   Download,
   Eye,
   FileText,
+  History,
   Image as ImageIcon,
-  KeyRound,
   Layers,
   LogOut,
   Maximize2,
@@ -18,15 +18,15 @@ import {
   MoveLeft,
   MoveRight,
   MoveUp,
+  PlusCircle,
   Printer,
   RefreshCw,
   RotateCcw,
   Search,
   Settings,
-  Shield,
   SlidersHorizontal,
   Upload,
-  User,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -48,6 +48,7 @@ import ThemeToggle from '../common/ThemeToggle.jsx';
 import StatusPill from '../common/StatusPill.jsx';
 import MetricCard from './MetricCard.jsx';
 import ModuleLoader from './ModuleLoader.jsx';
+import CaseAIHistory from './CaseAIHistory.jsx';
 import {
   buildReportDraft,
   buildReportHtml,
@@ -330,6 +331,11 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [searchQuery, setSearchQuery] = useState('');
   const [caseFilters, setCaseFilters] = useState(caseFilterDefaults);
   const [isCaseFilterOpen, setIsCaseFilterOpen] = useState(false);
+  const [isCreateCaseOpen, setIsCreateCaseOpen] = useState(false);
+  const [newCaseProtocol, setNewCaseProtocol] = useState('');
+  const [newCaseNumber, setNewCaseNumber] = useState('');
+  const [newCaseAge, setNewCaseAge] = useState(45);
+  const [newCaseGender, setNewCaseGender] = useState('female');
 
   const risk = getRiskPlan(analysisResult);
   const diagnosisTone = getDiagnosisTone(analysisResult);
@@ -576,7 +582,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
     try {
       const data = await runAnalysisJob(
-        { libraryId, file },
+        { libraryId, file, patientId: patientName },
         {
           signal: controller.signal,
           onTaskUpdate: (update) => {
@@ -604,7 +610,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       setLoading(false);
       analysisAbortRef.current = null;
     }
-  }, []);
+  }, [patientName]);
 
   const loadLibrary = useCallback(async () => {
     setErrorMessage('');
@@ -1000,6 +1006,42 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       return <ModuleLoader tabId={tabLoading} />;
     }
 
+    if (activeTab === 'history') {
+      return (
+        <CaseAIHistory
+          patientId={patientName}
+          activeCaseId={selectedScanId}
+          onSelectAnalysis={(historyItem) => {
+            if (historyItem) {
+              const diagMap = {
+                glioma: 'Glioma (Glial Tümör)',
+                meningioma: 'Meningioma (Meninks Tümörü)',
+                notumor: 'Tümör Saptanmadı (Normal)',
+                pituitary: 'Pituitary (Hipofiz Adenomu)',
+              };
+              const pred = historyItem.prediction || 'glioma';
+              setAnalysisResult(repairDeep({
+                prediction: pred,
+                diagnosis_tr: diagMap[pred] || pred,
+                confidence: historyItem.confidence || 0.9,
+                probs: historyItem.probabilities || {},
+                model_id: historyItem.model || 'neuroonco-v3',
+                who_grade_hint: historyItem.who_grade_hint || 'Grade II-IV',
+                tumor_area_ratio_2d: historyItem.tumor_area_ratio_2d || 0.14,
+                volume: historyItem.tumor_volume_cm3 || 38.4,
+                tumor_volume_cm3: historyItem.tumor_volume_cm3 || 38.4,
+                et_wt_ratio: historyItem.et_wt_ratio || 0.42,
+                mask_artifact_id: historyItem.mask_artifact_id || 'mask_tumor_gtv.nii.gz',
+                report: historyItem.raw_output?.summary || `[GEÇMİŞTEN YÜKLENDİ]\nÖn Tanı: ${diagMap[pred] || pred}`,
+                is_valid: true,
+              }));
+              setActiveTab('overview');
+            }
+          }}
+        />
+      );
+    }
+
     if (activeTab === 'pipeline') {
       const stages = [
         ['original', 'Orijinal kesit', 'Yüklenen veya seçilen ham MRG kesiti.'],
@@ -1349,6 +1391,39 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
     }
     return (
       <>
+        <div
+          className="workspace-action-banner"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+            background: 'var(--surface)',
+            padding: '0.65rem 1rem',
+            borderRadius: '10px',
+            border: '1px solid var(--line)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--muted)' }}>Aktif Hasta / Protokol:</span>
+            <strong style={{ fontSize: '0.875rem', color: 'var(--ink)' }}>{patientName}</strong>
+            {selectedScanId && (
+              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'var(--chip-bg)', color: 'var(--muted)' }}>
+                Vaka: {selectedScanId}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="workspace-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', padding: '0.35rem 0.75rem' }}
+            onClick={() => switchTab('history')}
+          >
+            <History size={14} />
+            <span>AI Geçmişini Görüntüle</span>
+          </button>
+        </div>
+
         <div className="overview-row">
           <MetricCard
             icon={Activity}
@@ -1620,6 +1695,26 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             <small>{filteredLibraryScans.length} vaka listeleniyor</small>
           </section>
 
+          <button
+            type="button"
+            className="workspace-secondary"
+            style={{
+              width: '100%',
+              marginBottom: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+            }}
+            onClick={() => setIsCreateCaseOpen(true)}
+          >
+            <PlusCircle size={15} />
+            <span>Yeni Hasta / Vaka Tanımla</span>
+          </button>
+
           <label className="workspace-field">
             <span>Vaka kütüphanesi</span>
             <select value={selectedScanId} onChange={handleLibrarySelect} disabled={loading}>
@@ -1738,6 +1833,110 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
         <SessionsModal
           onClose={() => setActiveUserModal(null)}
         />
+      )}
+
+      {/* ── YENİ VAKA / HASTA TANIMLAMA MODALI ── */}
+      {isCreateCaseOpen && (
+        <div className="history-modal-backdrop" onClick={() => setIsCreateCaseOpen(false)}>
+          <div className="history-modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="history-modal-header">
+              <div className="modal-title-left">
+                <PlusCircle size={20} className="text-teal" />
+                <div>
+                  <h4>Yeni Hasta / Vaka Tanımla</h4>
+                  <span className="modal-sub">Klinik analiz için yeni hasta ve çalışma kaydı</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="close-modal-btn"
+                onClick={() => setIsCreateCaseOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const cleanProto = newCaseProtocol.trim() || `NOT-${Date.now().toString().slice(-6)}`;
+                const cleanCaseNo = newCaseNumber.trim() || `CASE-${Date.now().toString().slice(-4)}`;
+                setPatientName(cleanProto);
+                setSelectedScanId(cleanCaseNo);
+                setPatientAge(Number(newCaseAge) || 45);
+                setPatientGender(newCaseGender);
+                setAnalysisResult(null);
+                setIsCreateCaseOpen(false);
+                setNewCaseProtocol('');
+                setNewCaseNumber('');
+              }}
+            >
+              <div className="history-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem' }}>
+                <label className="workspace-field">
+                  <span>Hasta Protokolü / Tanımlayıcı (patient_id) *</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Örn: NOT-2026-GLI-099"
+                    value={newCaseProtocol}
+                    onChange={(e) => setNewCaseProtocol(e.target.value)}
+                    autoFocus
+                  />
+                </label>
+
+                <label className="workspace-field">
+                  <span>Vaka / Çalışma Numarası (case_number)</span>
+                  <input
+                    type="text"
+                    placeholder="Örn: CASE-2026-099"
+                    value={newCaseNumber}
+                    onChange={(e) => setNewCaseNumber(e.target.value)}
+                  />
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <label className="workspace-field">
+                    <span>Yaş</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={newCaseAge}
+                      onChange={(e) => setNewCaseAge(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="workspace-field">
+                    <span>Cinsiyet</span>
+                    <select
+                      value={newCaseGender}
+                      onChange={(e) => setNewCaseGender(e.target.value)}
+                    >
+                      <option value="female">Kadın</option>
+                      <option value="male">Erkek</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="history-modal-footer">
+                <button
+                  type="button"
+                  className="workspace-secondary"
+                  onClick={() => setIsCreateCaseOpen(false)}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="workspace-primary"
+                >
+                  Vakayı Başlat
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </main>
   );

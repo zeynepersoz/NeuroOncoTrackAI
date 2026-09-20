@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import uuid
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -118,7 +118,9 @@ class AdminUserResponse(BaseModel):
     """
 
     id: uuid.UUID
-    organization_id: uuid.UUID
+    organization_id: uuid.UUID | None = None
+    organization_name: str | None = None
+    organization_code: str | None = None
     email: EmailStr
     first_name: str
     last_name: str
@@ -135,6 +137,30 @@ class AdminUserResponse(BaseModel):
     last_login_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_organization_info(cls, data: Any) -> Any:
+        if hasattr(data, "organization") and data.organization is not None:
+            # When validating directly from an ORM User model
+            if not isinstance(data, dict):
+                org = getattr(data, "organization", None)
+                if org:
+                    # Set attributes or create dict representation
+                    org_name = getattr(org, "name", None)
+                    org_code = getattr(org, "code", None)
+                    # We can monkeypatch or return dict
+                    setattr(data, "organization_name", org_name)
+                    setattr(data, "organization_code", org_code)
+        elif isinstance(data, dict):
+            org = data.get("organization")
+            if isinstance(org, dict):
+                data.setdefault("organization_name", org.get("name"))
+                data.setdefault("organization_code", org.get("code"))
+            elif hasattr(org, "name"):
+                data.setdefault("organization_name", getattr(org, "name", None))
+                data.setdefault("organization_code", getattr(org, "code", None))
+        return data
 
 
 class AdminUserListResponse(PaginatedResponse[AdminUserResponse]):
@@ -199,9 +225,32 @@ class AdminRoleChangeRequest(BaseModel):
         if isinstance(data, dict):
             if "role" in data and "new_role" not in data:
                 data["new_role"] = data.pop("role")
+            role_val = data.get("new_role")
+            if isinstance(role_val, str):
+                normalized = role_val.strip().upper()
+                if normalized == "SUPERADMIN":
+                    data["new_role"] = Role.SUPER_ADMIN
+                elif normalized == "RADIOLOGIST":
+                    data["new_role"] = Role.RADIOLOGY_TECH
+                elif normalized in ("VIEWER", "AUDITOR"):
+                    data["new_role"] = Role.AUDITOR
         return data
 
     model_config = ConfigDict(extra="forbid")
+
+
+class AdminUserPermissionsUpdateRequest(BaseModel):
+    """Request payload for updating user extra and revoked permissions."""
+
+    extra_permissions: list[str] | None = Field(
+        default=None, description="Full replacement list for extra permissions"
+    )
+    revoked_permissions: list[str] | None = Field(
+        default=None, description="Full replacement list for revoked permissions"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
 
 
 # ── 4. Administrative Organization Management DTOs ───────────────────────────
@@ -345,6 +394,9 @@ class SecurityUserStats(BaseModel):
     active: int = Field(..., ge=0)
     inactive: int = Field(..., ge=0)
     locked: int = Field(..., ge=0)
+    mfa_enabled: int = Field(default=0, ge=0)
+    mfa_adoption_rate: int = Field(default=0, ge=0)
+
 
 
 class SecurityOrganizationStats(BaseModel):

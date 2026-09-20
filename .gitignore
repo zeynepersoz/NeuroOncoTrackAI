@@ -1,37 +1,224 @@
-# Python
+# ==============================================================================
+# NeuroOncoTrack-AI Root .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Operating System Files
+# ------------------------------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ------------------------------------------------------------------------------
+# IDEs & Code Editors
+# ------------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*.sw?
+*~
+*.bak
+
+# ------------------------------------------------------------------------------
+# Environment Variables, Secrets & Certificates
+# ------------------------------------------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.pub
+id_rsa*
+id_ed25519*
+keys/
+test_keys/
+secrets/
+credentials/
+
+# ------------------------------------------------------------------------------
+# Python & Virtual Environments
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
 *.egg-info/
-.venv/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
 env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+conda/
+
+# ------------------------------------------------------------------------------
+# Testing, Coverage, Linting & Type Checking
+# ------------------------------------------------------------------------------
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-.DS_Store
+# ------------------------------------------------------------------------------
+# Jupyter Notebooks & Data Science
+# ------------------------------------------------------------------------------
+.ipynb_checkpoints/
+*-checkpoint.ipynb
 
-# Logs & outputs (dev artefaktları — modellere karışmasın)
-*.log
-*.tmp
-outputs/
+# ------------------------------------------------------------------------------
+# Medical Imaging Datasets & AI / Deep Learning Weights
+# ------------------------------------------------------------------------------
+# Large medical imaging scans (DICOM / NIfTI / MetaImage)
+*.nii
+*.nii.gz
+*.dcm
+*.dicom
+*.mha
+*.mhd
+*.h5
+*.hdf5
+
+# Deep Learning weights & large checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# ML Experiment tracking & Vector stores
+wandb/
+mlruns/
+mlartifacts/
+lightning_logs/
+runs/
+chroma_db/
+faiss_index/
+.cache/
+
+# ------------------------------------------------------------------------------
+# Databases & Local Storage
+# ------------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite3-journal
+data/
+!ai_service/mert/data/guidelines/
+!ai_service/mert/data/guidelines/*.txt
+storage/
 uploads/
-_quarantine/
 processed/
-result.json
+outputs/
+_quarantine/
+media/
+temp/
+tmp/
 
-# Local secrets
-.env
-.env.local
+# ------------------------------------------------------------------------------
+# Node.js & Frontend (NeuroOncoTrackAI-frontend)
+# ------------------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+.eslintcache
+*.tsbuildinfo
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
 
-# Fine-tune artefaktları (büyük — finetune_kaggle.py yeniden üretir)
-ai_service/finetuned_models_kaggle/*.pkl
-ai_service/finetuned_models_kaggle/*.npz
+# Logs & Temporary Lint Outputs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+lint_errors.txt
+lint*.txt
+*lint_errors*.txt
 
-# Kaggle raw dataset (repo dışı, mutlak path'ten okunur)
-ai_service/data/kaggle/
+# ------------------------------------------------------------------------------
+# Docker
+# ------------------------------------------------------------------------------
+docker-compose.override.yml
+.docker/

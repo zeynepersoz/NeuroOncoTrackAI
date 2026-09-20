@@ -109,21 +109,70 @@ export async function getSuperAdminUsers({
   };
 }
 
+export async function getSuperAdminUserPermissions(userId) {
+  return await callSuperAdmin(`/admin/users/${userId}/permissions`);
+}
+
+export async function updateSuperAdminUserPermissions(userId, { extra_permissions, revoked_permissions } = {}) {
+  return await callSuperAdmin(`/admin/users/${userId}/permissions`, {
+    method: 'PUT',
+    body: {
+      extra_permissions,
+      revoked_permissions,
+    },
+  });
+}
+
+export async function addSuperAdminUserExtraPermission(userId, permission) {
+  return await callSuperAdmin(`/admin/users/${userId}/permissions/extra`, {
+    method: 'POST',
+    body: { permission },
+  });
+}
+
+export async function removeSuperAdminUserExtraPermission(userId, permission) {
+  return await callSuperAdmin(`/admin/users/${userId}/permissions/extra/${encodeURIComponent(permission)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function createSuperAdminUser(userData) {
+  return await callSuperAdmin('/admin/users', {
+    method: 'POST',
+    body: userData,
+  });
+}
+
+export async function removeUserFromOrganization(orgId, userId) {
+  return await callSuperAdmin(`/admin/organizations/${orgId}/users/${userId}/remove`, {
+    method: 'POST',
+  });
+}
+
 export async function patchSuperAdminUser(userId, updates) {
-  if (updates.first_name || updates.last_name || updates.title) {
-    await callSuperAdmin(`/admin/users/${userId}/profile`, {
+  if (updates.first_name || updates.last_name || updates.title || updates.email || updates.organization_id !== undefined) {
+    await callSuperAdmin(`/admin/users/${userId}`, {
       method: 'PATCH',
       body: {
         first_name: updates.first_name,
         last_name: updates.last_name,
         title: updates.title,
+        email: updates.email,
+        organization_id: updates.organization_id,
       },
     });
   }
-  if (updates.role) {
+  if (updates.role && (!updates.initial_role || updates.role !== updates.initial_role)) {
     await callSuperAdmin(`/admin/users/${userId}/role`, {
       method: 'PUT',
       body: { role: updates.role },
+    });
+  }
+  if (updates.extra_permissions !== undefined || updates.permissions !== undefined) {
+    const extra = updates.extra_permissions !== undefined ? updates.extra_permissions : updates.permissions;
+    await updateSuperAdminUserPermissions(userId, {
+      extra_permissions: extra,
+      revoked_permissions: updates.revoked_permissions,
     });
   }
   if (updates.is_active !== undefined) {
@@ -189,7 +238,9 @@ export async function getSuperAdminSessions({ organizationId = '' } = {}) {
   };
 }
 
-export async function revokeSuperAdminSession(userId, sessionId) {
+export async function revokeSuperAdminSession(sessionIdOrUserId, maybeSessionId) {
+  const sessionId = maybeSessionId || sessionIdOrUserId;
+  const userId = maybeSessionId ? sessionIdOrUserId : null;
   if (!userId) {
     return await callSuperAdmin(`/admin/sessions/${sessionId}`, { method: 'DELETE' });
   }

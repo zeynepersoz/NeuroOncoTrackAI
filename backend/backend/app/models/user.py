@@ -37,10 +37,10 @@ class User(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
     # ── Organization Scope ───────────────────────────────────
-    organization_id: Mapped[uuid.UUID] = mapped_column(
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 

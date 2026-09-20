@@ -28,8 +28,13 @@ export function clearAccessToken() {
   accessToken = null;
 }
 
-export function isEndpointUnavailable() {
-  return false;
+export function isEndpointUnavailable(error) {
+  return (
+    error?.status === 404 ||
+    error?.status === 501 ||
+    error?.code === 'NOT_FOUND' ||
+    (typeof error?.message === 'string' && error.message.toLowerCase().includes('bulunamadı'))
+  );
 }
 
 export function isNetworkUnavailable(error) {
@@ -152,6 +157,8 @@ export async function apiRequest(path, options = {}) {
 export const apiClient = {
   get: (path, options) => apiRequest(path, { ...options, method: 'GET' }),
   post: (path, body, options) => apiRequest(path, { ...options, body, method: 'POST' }),
+  put: (path, body, options) => apiRequest(path, { ...options, body, method: 'PUT' }),
   patch: (path, body, options) => apiRequest(path, { ...options, body, method: 'PATCH' }),
   delete: (path, options) => apiRequest(path, { ...options, method: 'DELETE' }),
 };
+

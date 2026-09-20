@@ -774,7 +774,7 @@ export function SessionsModal({ onClose }) {
 }
 
 function SessionCard({ session, isCurrent, onRevoke, revoking }) {
-  const { icon: DeviceIcon, label: deviceLabel } = parseDevice(session.user_agent);
+  const { icon: DeviceIcon } = parseDevice(session.user_agent);
   const browser = parseBrowser(session.user_agent);
   const os = parseOS(session.user_agent);
 

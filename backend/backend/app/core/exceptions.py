@@ -26,6 +26,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import settings
+
 
 # ── Error Codes ──────────────────────────────────────────────
 
@@ -54,6 +56,13 @@ class ErrorCode:
     # Rate Limit — 429
     RATE_001 = "RATE_001"  # İstek limiti aşıldı
 
+    # AI Services — 502 / 503 / 504
+    AI_001 = "AI_001"  # AI servisi kullanılamıyor (503)
+    AI_002 = "AI_002"  # AI servisi zaman aşımı (504)
+    AI_003 = "AI_003"  # AI servisi hatalı yanıt (502)
+    AI_004 = "AI_004"  # AI servisi geçersiz yanıt formatı (502)
+    AI_005 = "AI_005"  # AI sağlayıcı hatası (502)
+
 
 ERROR_STATUS_MAP: dict[str, int] = {
     ErrorCode.AUTH_001: 401,
@@ -64,6 +73,11 @@ ERROR_STATUS_MAP: dict[str, int] = {
     ErrorCode.AUTH_006: 403,
     ErrorCode.VAL_001: 422,
     ErrorCode.RATE_001: 429,
+    ErrorCode.AI_001: 503,
+    ErrorCode.AI_002: 504,
+    ErrorCode.AI_003: 502,
+    ErrorCode.AI_004: 502,
+    ErrorCode.AI_005: 502,
 }
 
 ERROR_MESSAGE_MAP: dict[str, str] = {
@@ -75,6 +89,11 @@ ERROR_MESSAGE_MAP: dict[str, str] = {
     ErrorCode.AUTH_006: "Parola değişimi zorunludur.",
     ErrorCode.VAL_001: "İstek doğrulama hatası.",
     ErrorCode.RATE_001: "Çok fazla istek. Lütfen daha sonra tekrar deneyin.",
+    ErrorCode.AI_001: "Yapay zeka servisine erişilemiyor. Lütfen daha sonra tekrar deneyin.",
+    ErrorCode.AI_002: "Yapay zeka servisi yanıt süresi aşıldı.",
+    ErrorCode.AI_003: "Yapay zeka servisinden beklenmeyen bir yanıt alındı.",
+    ErrorCode.AI_004: "Yapay zeka servisi yanıt formatı doğrulanamadı.",
+    ErrorCode.AI_005: "Yapay zeka sağlayıcı işlemi sırasında hata oluştu.",
 }
 
 
@@ -172,6 +191,77 @@ class RateLimitError(AppError):
         super().__init__(code=ErrorCode.RATE_001, detail=detail)
 
 
+class NotFoundError(AppError):
+    """NOT_FOUND — İstenen kaynak bulunamadı."""
+
+    def __init__(self, message: str = "Kaynak bulunamadı.", detail: str | None = None):
+        super().__init__(code="NOT_FOUND", message=message, detail=detail, status_code=404)
+
+
+# ── AI Exceptions ───────────────────────────────────────────
+
+class AIError(AppError):
+    """Base exception for all AI integration errors."""
+
+    def __init__(
+        self,
+        code: str = ErrorCode.AI_005,
+        message: str | None = None,
+        detail: str | None = None,
+        status_code: int | None = None,
+    ):
+        safe_detail = self._sanitize_detail(detail)
+        super().__init__(code=code, message=message, detail=safe_detail, status_code=status_code)
+
+    @staticmethod
+    def _sanitize_detail(detail: str | None) -> str | None:
+        if not detail:
+            return None
+        import re
+        # Strip URLs (e.g. http://localhost:8100, http://ai-service:8100/infer)
+        cleaned = re.sub(r"https?://[^\s/$.?#].[^\s]*", "[REDACTED_URL]", detail)
+        # Strip API keys/secrets
+        cleaned = re.sub(r"(?:api[_-]?key|secret|token)[:=]\s*[\w\-.]+", "[REDACTED_CREDENTIAL]", cleaned, flags=re.IGNORECASE)
+        # Mask hostnames with ports (e.g. ai-service:8100)
+        cleaned = re.sub(r"\b[\w\-]+:\d{2,5}\b", "[REDACTED_ENDPOINT]", cleaned)
+        return cleaned
+
+
+class AIServiceUnavailable(AIError):
+    """AI_001 — AI servisi kullanılamıyor veya bağlantı kurulamadı (503)."""
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(code=ErrorCode.AI_001, detail=detail)
+
+
+class AIServiceTimeout(AIError):
+    """AI_002 — AI servisi yanıt süresi zaman aşımına uğradı (504)."""
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(code=ErrorCode.AI_002, detail=detail)
+
+
+class AIServiceBadResponse(AIError):
+    """AI_003 — AI servisinden geçersiz/hatalı HTTP yanıtı alındı (502)."""
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(code=ErrorCode.AI_003, detail=detail)
+
+
+class AIServiceInvalidResponse(AIError):
+    """AI_004 — AI servisinden gelen veri doğrulanamadı veya şemaya uymuyor (502)."""
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(code=ErrorCode.AI_004, detail=detail)
+
+
+class AIProviderError(AIError):
+    """AI_005 — AI sağlayıcısı seviyesinde hata oluştu (502)."""
+
+    def __init__(self, detail: str | None = None):
+        super().__init__(code=ErrorCode.AI_005, detail=detail)
+
+
 # ── FastAPI Exception Handlers ───────────────────────────────
 
 def _get_request_id(request: Request) -> str | None:
@@ -229,8 +319,29 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     return JSONResponse(status_code=exc.status_code, content={"error": body})
 
 
+async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Global fallback handler for unhandled 500 internal server exceptions."""
+    request_id = _get_request_id(request)
+    # Mask internal traceback/credentials in production environments
+    detail_msg = (
+        str(exc)
+        if getattr(settings, "is_development", True)
+        else "Sunucu işlemi sırasında beklenmeyen bir hata meydana geldi."
+    )
+    body: dict[str, Any] = {
+        "code": "INTERNAL_SERVER_ERROR",
+        "message": "Sunucu içi bir hata oluştu.",
+        "detail": detail_msg,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if request_id:
+        body["request_id"] = request_id
+    return JSONResponse(status_code=500, content={"error": body})
+
+
 def register_exception_handlers(app: Any) -> None:
     """Register all custom exception handlers on the FastAPI app."""
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)

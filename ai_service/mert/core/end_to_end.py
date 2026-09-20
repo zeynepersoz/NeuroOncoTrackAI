@@ -7,7 +7,7 @@ from typing import Optional
 import numpy as np
 
 from llm.embedder import Embedder
-from llm.rag_pipeline import RAGPipeline
+from llm.rag_pipeline import DEFAULT_GROQ_MODEL, RAGPipeline
 from llm.vector_store import VectorStore
 
 logger = logging.getLogger("neurooncotrack.core")
@@ -52,7 +52,7 @@ class NeuroOncoTrackPipeline:
         self,
         groq_api_key: str,
         guidelines_dir: Path,
-        model_name: str = "llama-3.3-70b-versatile",
+        model_name: str = DEFAULT_GROQ_MODEL,
     ):
         logger.info("Pipeline başlatılıyor...")
 
