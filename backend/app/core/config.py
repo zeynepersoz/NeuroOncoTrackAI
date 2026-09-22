@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_ATTEMPTS: int = 5
     LOGIN_RATE_LIMIT_WINDOW_MINUTES: int = 15
     ACCOUNT_LOCK_DURATION_MINUTES: int = 30
+    AI_CLASSIFICATION_RATE_LIMIT_ATTEMPTS: int = 30
+    AI_CLASSIFICATION_RATE_LIMIT_WINDOW_MINUTES: int = 1
+    AI_SEGMENTATION_RATE_LIMIT_ATTEMPTS: int = 10
+    AI_SEGMENTATION_RATE_LIMIT_WINDOW_MINUTES: int = 1
+    AI_REPORT_RATE_LIMIT_ATTEMPTS: int = 10
+    AI_REPORT_RATE_LIMIT_WINDOW_MINUTES: int = 1
 
     # ── MFA ──────────────────────────────────────────────────
     MFA_ISSUER_NAME: str = "NeuroOncoTrack"
@@ -69,6 +75,34 @@ class Settings(BaseSettings):
 
     # ── CORS ─────────────────────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    # ── AI Services ──────────────────────────────────────────
+    AI_SERVICE_URL: str | None = None
+    AI_SEGMENTATION_URL: str | None = None
+    AI_REPORT_URL: str | None = None
+    AI_API_KEY: str | None = None
+    AI_CONNECT_TIMEOUT_SECONDS: float = 10.0
+    AI_READ_TIMEOUT_SECONDS: float = 60.0
+    AI_WRITE_TIMEOUT_SECONDS: float = 30.0
+    AI_POOL_TIMEOUT_SECONDS: float = 10.0
+    AI_TOTAL_TIMEOUT_SECONDS: float = 120.0
+    AI_MAX_RETRIES: int = 3
+    AI_RETRY_BACKOFF_FACTOR: float = 0.5
+
+    # AI Operation Toggles
+    AI_CLASSIFICATION_ENABLED: bool = True
+    AI_SEGMENTATION_ENABLED: bool = True
+    AI_REPORT_ENABLED: bool = True
+
+    # AI Model Configurations
+    AI_CLASSIFICATION_MODEL: str = "neuroonco-v3"
+    AI_SEGMENTATION_MODEL: str = "segmentation-3d"
+    AI_REPORT_MODEL: str = "report-rag"
+
+    # Operation-specific Read Timeouts
+    AI_CLASSIFICATION_READ_TIMEOUT_SECONDS: float = 30.0
+    AI_SEGMENTATION_READ_TIMEOUT_SECONDS: float = 120.0
+    AI_REPORT_READ_TIMEOUT_SECONDS: float = 60.0
 
     # ── Computed Properties ──────────────────────────────────
 

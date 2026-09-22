@@ -39,6 +39,12 @@ THREE_D_CASES = {
     "3D_MEN_0402": f"{_A3}/BraTS-MEN-RT-0402-1/BraTS-MEN-RT-0402-1/BraTS-MEN-RT-0402-1_t1c.nii",
     "3D_MEN_0183": f"{_A3}/BraTS2024-MEN-RT-ValidationData/BraTS-MEN-RT-Val-v1/BraTS-MEN-RT-0183-1/BraTS-MEN-RT-0183-1_t1c.nii",
     "3D_MEN_0697": f"{_A3}/BraTS2024-MEN-RT-ValidationData/BraTS-MEN-RT-Val-v1/BraTS-MEN-RT-0697-1/BraTS-MEN-RT-0697-1_t1c.nii",
+    "3D_MEN_0452": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0452-1/BraTS-MEN-RT-0452-1_t1c.nii",
+    "3D_MEN_0517": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0517-1/BraTS-MEN-RT-0517-1_t1c.nii",
+    "3D_MEN_0195": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0195-1/BraTS-MEN-RT-0195-1_t1c.nii",
+    "3D_MEN_0113": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0113-1/BraTS-MEN-RT-0113-1_t1c.nii",
+    "3D_MEN_0502": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0502-1/BraTS-MEN-RT-0502-1_t1c.nii",
+    "3D_MEN_0155": "/Users/zeynepersoz/Downloads/archive-3/BraTS2024-MEN-RT-TrainingData/BraTS-MEN-RT-Train-v2/BraTS-MEN-RT-0155-1/BraTS-MEN-RT-0155-1_t1c.nii",
 }
 
 _TR = {"glioma": "Gliom", "meningioma": "Menenjiyom",
@@ -152,6 +158,13 @@ async def case_library():
                           "description": p.stem, "modality": "MR"})
     # 3D referans vakalar (yalnız dosya mevcutsa)
     labels = {"3D_MEN_0402": "3D Menenjiyom · BraTS 0402",
+              "3D_MEN_0452": "3D Menenjiyom · BraTS 0452",
+              "3D_MEN_0517": "3D Menenjiyom · BraTS 0517",
+              "3D_MEN_0195": "3D Menenjiyom · BraTS 0195",
+              "3D_MEN_0113": "3D Menenjiyom · BraTS 0113",
+              "3D_MEN_0502": "3D Menenjiyom · BraTS 0502",
+              "3D_MEN_0155": "3D Menenjiyom · BraTS 0155",
+
               "3D_MEN_0183": "3D Menenjiyom · BraTS 0183",
               "3D_MEN_0697": "3D Menenjiyom · BraTS 0697"}
     for cid, path in THREE_D_CASES.items():
@@ -393,6 +406,7 @@ async def model_vs_truth():
     /classify_viz ile çalışır (önbellekli). Her satır: görüntü + gerçek tanı + model
     tahmini + güven + uyum (✓/✗). Özet: doğruluk (%)."""
     rows: list[dict] = []
+    # 2D referans görüntüler
     if DEMO_DIR.exists():
         for p in sorted(DEMO_DIR.glob("*.jpg")) + sorted(DEMO_DIR.glob("*.png")):
             gt = _gt_from_filename(p.name)
@@ -402,7 +416,7 @@ async def model_vs_truth():
             cached = _cache_get("lib_" + p.name)
             if cached is not None and cached.get("prediction"):
                 pred = cached.get("prediction")
-                conf = cached.get("confidence")
+                conf = cached.get("confidence")   # zaten yüzde
                 thumb = (cached.get("images") or {}).get("original")
             else:
                 try:
@@ -420,7 +434,15 @@ async def model_vs_truth():
                 "confidence": conf, "correct": (pred == gt),
                 "image": thumb or _b64(data),
             })
+    # 3D referans (gerçek tanı = menenjiyom; model yalnız önbellek/pod varsa)
     _lbl = {"3D_MEN_0402": "3D Menenjiyom · BraTS 0402",
+              "3D_MEN_0452": "3D Menenjiyom · BraTS 0452",
+              "3D_MEN_0517": "3D Menenjiyom · BraTS 0517",
+              "3D_MEN_0195": "3D Menenjiyom · BraTS 0195",
+              "3D_MEN_0113": "3D Menenjiyom · BraTS 0113",
+              "3D_MEN_0502": "3D Menenjiyom · BraTS 0502",
+              "3D_MEN_0155": "3D Menenjiyom · BraTS 0155",
+
             "3D_MEN_0183": "3D Menenjiyom · BraTS 0183",
             "3D_MEN_0697": "3D Menenjiyom · BraTS 0697"}
     for cid, path in THREE_D_CASES.items():
@@ -463,6 +485,49 @@ async def hospital_comparison():
     if HOSPITAL_IMG_JSON.exists():
         try:
             return json.loads(HOSPITAL_IMG_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            return {"summary": {}, "cases": []}
+    return {"summary": {}, "cases": []}
+
+
+# ── Radyogenomik sanal biyopsi (gerçek IDH modeli — UCSF-PDGM, AUC 0.919) ──
+# Yerel dosya (public UCSF-PDGM'den türetilmiş demo vakaları). IDH gerçek tahmin;
+# MGMT imaging'den güvenilir tahmin edilemez → dürüst "lab gerekir". Repoda YOK.
+RADIOGENOMICS_JSON = Path(os.environ.get(
+    "NEURO_RADIOGENOMICS",
+    "/Users/zeynepersoz/NeuroOncoTrack/patoloji_hashed/radiogenomics_cases.json"))
+
+
+@router.get("/api/radiogenomics")
+async def radiogenomics():
+    """Radyogenomik sanal biyopsi demo vakaları: gerçek IDH tahmini + olasılık +
+    SHAP-benzeri özellikler + MR kesiti. Model UCSF-PDGM ile eğitildi (5-fold CV
+    AUC 0.919). MGMT dürüstçe 'lab gerekir'. Dosya yoksa boş döner."""
+    if RADIOGENOMICS_JSON.exists():
+        try:
+            return json.loads(RADIOGENOMICS_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            return {"summary": {}, "cases": []}
+    return {"summary": {}, "cases": []}
+
+
+# ── Gerçek anonim referans vakalar (UCSF-PDGM) — 4 modalite + seg + patoloji ──
+# Public de-identified glioma hastaları: 4 modaliteli MR + 3D tümör segmentasyonu +
+# gerçek patoloji (IDH/MGMT/derece/tanı) + modelimizin DOĞRU IDH tahmini. Gerçek
+# veri olduğu açıkça işaretli (is_real). Yerel dosya; repoda YOK.
+REFERENCE_CASES_JSON = Path(os.environ.get(
+    "NEURO_REFERENCE_CASES",
+    "/Users/zeynepersoz/NeuroOncoTrack/patoloji_hashed/real_reference_cases.json"))
+
+
+@router.get("/api/reference-cases")
+async def reference_cases():
+    """Gerçek anonim glioma hastaları (UCSF-PDGM): her vaka 4 modalite MR,
+    3D tümör segmentasyonu (hacim cm³), gerçek patoloji ve radyogenomik IDH
+    tahmini içerir. Rapordaki tüm çıktılar tek vakada görülebilir."""
+    if REFERENCE_CASES_JSON.exists():
+        try:
+            return json.loads(REFERENCE_CASES_JSON.read_text(encoding="utf-8"))
         except Exception:
             return {"summary": {}, "cases": []}
     return {"summary": {}, "cases": []}

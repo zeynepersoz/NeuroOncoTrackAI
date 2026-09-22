@@ -72,7 +72,7 @@ import {
   repairText,
   toNumber,
 } from '../../utils/neuroUtils.js';
-import { fetchComparison, fetchHospitalComparison, listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
+import { fetchComparison, fetchHospitalComparison, fetchRadiogenomics, fetchRealCases, listCaseLibrary, listHospitalCases, runAnalysisJob } from '../../services/studyService.js';
 import {
   amendReport,
   approveReport,
@@ -296,6 +296,9 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [hospitalCases, setHospitalCases] = useState([]);
   const [comparison, setComparison] = useState(null);
   const [hospitalCmp, setHospitalCmp] = useState(null);
+  const [radiogenomics, setRadiogenomics] = useState(null);
+  const [realCases, setRealCases] = useState(null);
+  const [selectedRealCase, setSelectedRealCase] = useState('');
   const [selectedScanId, setSelectedScanId] = useState('');
   const viewerShellRef = useRef(null);
   const viewerDragRef = useRef({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
@@ -331,6 +334,8 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
   const [manualDraftKey, setManualDraftKey] = useState('');
   const [activeFhirResource, setActiveFhirResource] = useState('patient');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hospitalSearch, setHospitalSearch] = useState('');
+  const [realSearch, setRealSearch] = useState('');
   const [caseFilters, setCaseFilters] = useState(caseFilterDefaults);
   const [isCaseFilterOpen, setIsCaseFilterOpen] = useState(false);
 
@@ -642,6 +647,14 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
   useEffect(() => {
     fetchHospitalComparison().then((d) => setHospitalCmp(d && typeof d === 'object' ? d : null)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchRadiogenomics().then((d) => setRadiogenomics(d && typeof d === 'object' ? d : null)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchRealCases().then((d) => setRealCases(d && typeof d === 'object' ? d : null)).catch(() => {});
   }, []);
 
   const handleLibrarySelect = (event) => {
@@ -1015,6 +1028,96 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       return <ModuleLoader tabId={tabLoading} />;
     }
 
+    if (activeTab === 'realcases') {
+      const rc = realCases || { summary: {}, cases: [] };
+      const rq = normalizeSearchText(realSearch.trim());
+      const list = (rc.cases || []).filter((c) => !rq || normalizeSearchText(`${c.id || ''} ${c.diagnosis || ''} ${c.tumor_type || ''} ${c.molecular_note || ''}`).includes(rq));
+      const sel = (selectedRealCase && list.find((c) => c.id === selectedRealCase)) || list[0] || null;
+      const modOrder = ['T1', 'T1c', 'T2', 'FLAIR'];
+      return (
+        <section className="product-card">
+          <div className="product-section-title">
+            <span>Gerçek Vakalar</span>
+            <h2>Trakya Ü. Hastanesi — anonim gerçek hasta ({list.length})</h2>
+          </div>
+          <p className="muted-copy">
+            🔬 Hastane tarafından de-identify edilmiş gerçek DICOM. 4 modalite MR (T1 · T1c · T2 · FLAIR) +
+            gerçek patoloji tanısı (WHO 2021) + modelimizin tip tahmini. Yerel veri (KVKK — repoda tutulmaz).
+          </p>
+          <input
+            type="search"
+            value={realSearch}
+            onChange={(event) => setRealSearch(event.target.value)}
+            placeholder="Ara: vaka kodu, tanı, tümör tipi, moleküler"
+            style={{ width: '100%', padding: '8px 12px', marginBottom: 12, borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: 'inherit', fontSize: '0.85rem' }}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+            {list.map((c) => (
+              <button key={c.id} type="button" onClick={() => setSelectedRealCase(c.id)}
+                style={{ padding: '5px 9px', borderRadius: 8, cursor: 'pointer', fontSize: '0.76rem',
+                  border: sel && sel.id === c.id ? '1px solid #3fbf7f' : '1px solid rgba(255,255,255,0.15)',
+                  background: sel && sel.id === c.id ? 'rgba(63,191,127,0.12)' : 'transparent', color: 'inherit' }}>
+                {c.id} {c.model_correct === true ? '✓' : c.model_correct === false ? '✗' : ''}
+              </button>
+            ))}
+          </div>
+          {sel ? (
+            <div>
+              <div style={{ display: 'inline-block', fontSize: '0.72rem', fontWeight: 600, color: '#3fbf7f',
+                border: '1px solid rgba(63,191,127,0.4)', borderRadius: 6, padding: '3px 8px', marginBottom: 10 }}>
+                GERÇEK ANONİM HASTA · {repairText(sel.source)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, marginBottom: 14 }}>
+                {modOrder.filter((k) => sel.modalities && sel.modalities[k]).map((k) => (
+                  <figure key={k} style={{ margin: 0 }}>
+                    <img src={`data:image/jpeg;base64,${sel.modalities[k]}`} alt={k}
+                      style={{ width: '100%', borderRadius: 8, display: 'block' }} />
+                    <figcaption style={{ fontSize: '0.72rem', opacity: 0.7, textAlign: 'center', marginTop: 3 }}>{k}</figcaption>
+                  </figure>
+                ))}
+                {sel.segmentation ? (
+                  <figure style={{ margin: 0 }}>
+                    <img src={`data:image/png;base64,${sel.segmentation}`} alt="3D segmentasyon"
+                      style={{ width: '100%', borderRadius: 8, display: 'block', outline: '2px solid rgba(229,72,77,0.6)' }} />
+                    <figcaption style={{ fontSize: '0.72rem', opacity: 0.85, textAlign: 'center', marginTop: 3, color: '#e5a13f' }}>
+                      3D Segmentasyon · {sel.tumor_volume_cm3} cm³
+                    </figcaption>
+                  </figure>
+                ) : null}
+              </div>
+              <div className="product-two-column">
+                <section className="product-card" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="product-section-title"><span>Patoloji (hastane)</span><h2>{repairText(sel.diagnosis)}</h2></div>
+                  <div className="marker-list">
+                    <div className="marker-row"><div><strong>Tümör tipi</strong></div><span>{repairText(sel.tumor_type)}</span></div>
+                    <div className="marker-row"><div><strong>Cinsiyet · doğum</strong></div><span>{repairText(sel.sex)} · {repairText(sel.birth_year)}</span></div>
+                    <p className="muted-copy" style={{ marginTop: 8, lineHeight: 1.5 }}>{repairText(sel.molecular_note)}</p>
+                  </div>
+                </section>
+                <section className="product-card" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="product-section-title"><span>Modelimizin tahmini</span>
+                    <h2 style={{ color: sel.model_correct ? '#3fbf7f' : '#e5484d' }}>
+                      {repairText(sel.model_pred_tr) || '—'} {typeof sel.model_conf === 'number' ? `· %${sel.model_conf}` : ''}
+                    </h2>
+                  </div>
+                  <p className="muted-copy" style={{ margin: '0 0 6px' }}>
+                    Gerçek tanı: {repairText(sel.tumor_type)} → {sel.model_correct ? '✓ model doğru' : '✗ model yanıldı'}
+                  </p>
+                  <p className="muted-copy" style={{ marginTop: 8 }}>
+                    {sel.segmentation
+                      ? `3D nnU-Net segmentasyonu (bizim modelimiz, GPU): tümör hacmi ${sel.tumor_volume_cm3} cm³ (≈ ${sel.equiv_diameter_cm} cm çap) — gerçek hastane verisinde.`
+                      : '3D segmentasyon: menenjiyom vakalarında mevcut (nnU-Net/GPU); glioma segmentasyonu gelecek iş.'}
+                    {' '}Radyogenomik IDH modeli (AUC 0,919) ayrı "Sanal biyopsi" sekmesinde.
+                  </p>
+                </section>
+              </div>
+            </div>
+          ) : <p className="muted-copy">Gerçek vaka verisi yok (yerel real_reference_cases.json gerekli).</p>}
+        </section>
+      );
+    }
+
     if (activeTab === 'comparison') {
       const cmp = comparison || { summary: {}, cases: [] };
       const s = cmp.summary || {};
@@ -1109,36 +1212,66 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
           </div>
           {!(hc.cases || []).length ? <p className="muted-copy">Görüntü karşılaştırması yok (yerel hospital_imaging_cases.json gerekli).</p> : null}
         </section>
+        {(() => {
+          const hq = normalizeSearchText(hospitalSearch.trim());
+          const hospRows = hospitalCases
+            .filter((c) => !hq || normalizeSearchText(`${c.name || ''} ${c.diagnosis || ''} ${c.department || ''} ${c.id || ''} ${JSON.stringify(c.molecular_structured || {})}`).includes(hq))
+            .slice()
+            .sort((a, b) => (Object.keys(b.molecular_structured || {}).length ? 1 : 0) - (Object.keys(a.molecular_structured || {}).length ? 1 : 0));
+          return (
         <section className="product-card">
           <div className="product-section-title">
             <span>Hastane Vakaları</span>
-            <h2>Anonimleştirilmiş patoloji kayıtları ({hospitalCases.length})</h2>
+            <h2>Anonimleştirilmiş patoloji kayıtları ({hospRows.length}/{hospitalCases.length})</h2>
           </div>
-          <p className="muted-copy">Sahte isim/soyisim · gerçek klinik veriler anonim (KVKK). Yalnız yerel.</p>
+          <p className="muted-copy">Sahte isim/soyisim · gerçek klinik veriler anonim (KVKK). Yalnız yerel. Tam moleküler verili kayıtlar öne alındı.</p>
+          <input
+            type="search"
+            value={hospitalSearch}
+            onChange={(event) => setHospitalSearch(event.target.value)}
+            placeholder="Ara: anonim isim, tanı, bölüm, moleküler (IDH, 1p/19q…)"
+            style={{ width: '100%', padding: '8px 12px', marginBottom: 10, borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: 'inherit', fontSize: '0.85rem' }}
+          />
           <div style={{ overflow: 'auto', maxHeight: 520 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr>
-                  {['Kod', 'Hasta (anonim)', 'Yaş', 'Bölüm', 'Patoloji tanısı'].map((h) => (
+                  {['Kod', 'Hasta (anonim)', 'Yaş', 'Bölüm', 'Patoloji tanısı', 'Moleküler (yapısal)'].map((h) => (
                     <th key={h} style={{ textAlign: 'left', padding: '8px', position: 'sticky', top: 0, background: 'var(--surface, #12181c)', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {hospitalCases.map((c) => (
+                {hospRows.map((c) => (
                   <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                     <td style={{ padding: '8px', opacity: 0.7 }}>{c.id}</td>
                     <td style={{ padding: '8px' }}>{repairText(c.name)}</td>
                     <td style={{ padding: '8px' }}>{c.age}</td>
                     <td style={{ padding: '8px', opacity: 0.85 }}>{repairText(c.department)}</td>
                     <td style={{ padding: '8px' }}>{repairText(c.diagnosis)}</td>
+                    <td style={{ padding: '8px' }}>
+                      {c.molecular_structured && Object.keys(c.molecular_structured).length ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {Object.entries(c.molecular_structured).map(([k, v]) => (
+                            <span key={k} style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: 5,
+                              background: k === 'IDH' ? 'rgba(63,191,127,0.15)' : 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.12)' }}>
+                              {k === 'WHO_derece' ? 'WHO ' + v : k === 'tip' ? repairText(String(v)) : `${k}: ${Array.isArray(v) ? v.join('/') : repairText(String(v))}`}
+                            </span>
+                          ))}
+                        </div>
+                      ) : <span style={{ opacity: 0.35 }}>—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {!hospitalCases.length ? <p className="muted-copy">Kayıt yok (yerel hospital_cases.json gerekli).</p> : null}
+          {!hospRows.length ? <p className="muted-copy">{hospitalCases.length ? 'Aramaya uyan kayıt yok.' : 'Kayıt yok (yerel hospital_cases.json gerekli).'}</p> : null}
         </section>
+          );
+        })()}
         </>
       );
     }
@@ -1179,7 +1312,9 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
 
     if (activeTab === 'biopsy') {
       const molecular = analysisResult?.molecular || {};
+      const rg = radiogenomics || { summary: {}, cases: [] };
       return (
+        <>
         <div className="product-two-column">
           <section className="product-card">
             <div className="product-section-title">
@@ -1250,6 +1385,44 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             ) : null}
           </section>
         </div>
+        {(rg.cases || []).length ? (
+          <section className="product-card" style={{ marginTop: 16 }}>
+            <div className="product-section-title">
+              <span>Radyogenomik — gerçek IDH modeli</span>
+              <h2>Sanal biyopsi doğrulaması (UCSF-PDGM)</h2>
+            </div>
+            <p className="muted-copy">
+              Gerçek glioma vakalarında radyomik → IDH tahmini. Model RF+GB, hasta-bazlı 5-fold CV,
+              {` AUC ${rg.summary?.idh_auc ?? '0.919'}`}. MGMT imaging'den güvenilir tahmin edilemez →
+              laboratuvar gerekir (sahte değer üretilmez).
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(258px, 1fr))', gap: 12 }}>
+              {(rg.cases || []).map((c) => (
+                <div key={c.id} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 10 }}>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {c.image ? <img src={`data:image/jpeg;base64,${c.image}`} alt={c.id} style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8 }} /> : null}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.72rem', opacity: 0.55 }}>{c.id} · WHO {c.who_grade}</div>
+                      <div style={{ fontSize: '0.8rem', margin: '2px 0' }}>{repairText(c.diagnosis)}</div>
+                      <div style={{ fontWeight: 600, color: c.model_idh === 'IDH-mutant' ? '#3fbf7f' : '#e5a13f' }}>
+                        {c.model_idh} · %{c.idh_mutant_prob}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', opacity: 0.7 }}>gerçek: {c.truth_idh} {c.correct ? '✓' : '✗'}</div>
+                    </div>
+                  </div>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, margin: '8px 0 6px' }}>
+                    <div style={{ width: `${c.idh_mutant_prob}%`, height: '100%', background: '#3fbf7f', borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                    Öne çıkan (SHAP): {(c.top_features || []).slice(0, 3).map((t) => t.feature).join(', ')}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', opacity: 0.55, marginTop: 4 }}>MGMT: laboratuvar gerekir</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        </>
       );
     }
 
@@ -1753,17 +1926,6 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
               <option value="glioma">Gliom</option>
               <option value="tumor">Diğer tümör</option>
               <option value="healthy">Sağlıklı</option>
-            </select>
-            <select value={caseFilters.gender} onChange={(event) => updateCaseFilter('gender', event.target.value)}>
-              <option value="all">Tüm cinsiyetler</option>
-              <option value="female">Kadın</option>
-              <option value="male">Erkek</option>
-            </select>
-            <select value={caseFilters.age} onChange={(event) => updateCaseFilter('age', event.target.value)}>
-              <option value="all">Tüm yaşlar</option>
-              <option value="under40">40 altı</option>
-              <option value="40to59">40-59</option>
-              <option value="60plus">60 ve üzeri</option>
             </select>
             <small>{filteredLibraryScans.length} vaka listeleniyor</small>
           </section>

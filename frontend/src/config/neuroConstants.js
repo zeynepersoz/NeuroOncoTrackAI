@@ -1,4 +1,4 @@
-import { Activity, Database, Eye, FileText, FlaskConical, Scale, Settings } from 'lucide-react';
+import { Activity, Database, Eye, FileText, FlaskConical, Microscope, Scale, Settings } from 'lucide-react';
 
 export const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 export const API_V1_BASE = `${API_BASE}/api/v1`;
@@ -90,6 +90,7 @@ export const workspaceTabs = [
   { id: 'xai', label: 'Açıklanabilirlik', icon: Eye, permission: permissions.aiRunXai },
   { id: 'report', label: 'Klinik rapor', icon: FileText, permission: permissions.reportRead },
   { id: 'fhir', label: 'FHIR çıktısı', icon: Database, permission: permissions.fhirRead },
+  { id: 'realcases', label: 'Gerçek Vakalar', icon: Microscope, permission: permissions.aiViewResult },
   { id: 'comparison', label: 'Model ↔ Tanı', icon: Scale, permission: permissions.aiViewResult },
   { id: 'hospital', label: 'Hastane Vakaları', icon: FlaskConical, permission: permissions.aiViewResult },
 ];

@@ -59,6 +59,7 @@ from app.schemas.admin import (
     AdminUserCreateRequest,
     AdminUserCreateResponse,
     AdminUserListResponse,
+    AdminUserPermissionsUpdateRequest,
     AdminUserResponse,
     AdminUserUpdateRequest,
     PermissionOverrideRequest,
@@ -518,11 +519,17 @@ async def get_admin_user_detail(
     return AdminUserResponse.model_validate(target_user)
 
 
-# ── 0.3 PATCH /admin/users/{user_id} ──────────────────────────
+# ── 0.3 PATCH /admin/users/{user_id} & /admin/users/{user_id}/profile ──
 @router.patch(
     "/users/{user_id}",
     response_model=AdminUserResponse,
     summary="Kullanıcı profil bilgilerini güncelle",
+)
+@router.patch(
+    "/users/{user_id}/profile",
+    response_model=AdminUserResponse,
+    summary="Kullanıcı profil bilgilerini güncelle (alias)",
+    include_in_schema=False,
 )
 async def update_admin_user_profile(
     user_id: str,
@@ -660,6 +667,12 @@ async def assign_admin_user_role(
         check_self_modification=True,
     )
 
+    old_role = str(target_user.role)
+
+    # Check if role is unchanged (NO-OP)
+    if old_role == payload.new_role.value:
+        return AdminUserResponse.model_validate(target_user)
+
     # Validate role hierarchy assignment rules (actor rank > new_role rank AND actor rank > current_role rank)
     if not can_assign_role(actor.role, payload.new_role, current_target_role=target_user.role):
         audit.log_authorization_event(
@@ -670,12 +683,6 @@ async def assign_admin_user_role(
             result="DENIED",
         )
         raise ForbiddenError(detail=f"'{payload.new_role.value}' rolünü atama veya değiştirme yetkiniz yoktur.")
-
-    old_role = str(target_user.role)
-
-    # Check if role is unchanged (NO-OP)
-    if old_role == payload.new_role.value:
-        return AdminUserResponse.model_validate(target_user)
 
     # Apply role mutation
     target_user.role = payload.new_role.value
@@ -1392,6 +1399,72 @@ async def deactivate_admin_organization(
     )
 
 
+# ── 0.14b POST /admin/organizations/{organization_id}/users/{user_id}/remove ──
+@router.post(
+    "/organizations/{organization_id}/users/{user_id}/remove",
+    status_code=status.HTTP_200_OK,
+    summary="Kullanıcıyı kurumdan çıkar",
+)
+async def remove_user_from_admin_organization(
+    organization_id: str,
+    user_id: str,
+    request: Request,
+    actor: User = Depends(rol_gerektir(Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Remove/unlink a user from an organization (sets organization_id to NULL).
+    - SUPER_ADMIN: Can remove user from any organization.
+    - HOSPITAL_ADMIN: Can remove users strictly from own organization.
+    - Self-removal or removing higher/equal administrative rank is forbidden.
+    """
+    try:
+        org_uuid = uuid.UUID(organization_id)
+        target_uuid = uuid.UUID(user_id)
+    except (ValueError, TypeError):
+        raise ValidationError(detail="Geçersiz kurum veya kullanıcı kimliği formatı.")
+
+    if not is_super_admin(actor.role):
+        if str(actor.organization_id) != str(org_uuid):
+            raise ForbiddenError(detail="Farklı kuruma ait kullanıcının ilişiğini kesemezsiniz.")
+
+    if str(actor.id) == str(target_uuid):
+        raise ForbiddenError(detail="Kendinizi kurumdan çıkaramazsınız.")
+
+    u_stmt = select(User).where(User.id == target_uuid)
+    u_res = await db.execute(u_stmt)
+    target_user = u_res.scalar_one_or_none()
+
+    if not target_user:
+        raise ForbiddenError(detail="Kullanıcı bulunamadı.")
+
+    if str(target_user.organization_id) != str(org_uuid):
+        raise ValidationError(detail="Kullanıcı zaten belirtilen kuruma ait değildir.")
+
+    if not is_super_admin(actor.role):
+        if is_super_admin(target_user.role) or target_user.role == Role.HOSPITAL_ADMIN.value:
+            raise ForbiddenError(detail="Yönetici seviyesindeki kullanıcıların kurum ilişiği kesilemez.")
+
+    target_user.organization_id = None
+    db.add(target_user)
+    await db.commit()
+    await db.refresh(target_user)
+
+    audit.log_audit_event(
+        event="ORGANIZATION_USER_REMOVED",
+        user_id=actor.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+        details={
+            "target_user_id": str(target_user.id),
+            "target_user_email": target_user.email,
+            "organization_id": str(org_uuid),
+        },
+    )
+
+    return {"success": True, "message": "Kullanıcı kurumdan başarıyla çıkarıldı."}
+
+
 # ── 0.15 GET /admin/sessions ──────────────────────────────────
 @router.get(
     "/sessions",
@@ -1841,6 +1914,64 @@ async def get_user_permissions(
     return _build_permissions_response(target_user)
 
 
+# ── 1.1 PUT /admin/users/{user_id}/permissions ────────────────
+@router.put(
+    "/users/{user_id}/permissions",
+    response_model=UserPermissionsResponse,
+    summary="Kullanıcı izinlerini toplu güncelle",
+)
+async def update_user_permissions(
+    user_id: str,
+    req_body: AdminUserPermissionsUpdateRequest,
+    request: Request,
+    actor: User = Depends(rol_gerektir(Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> UserPermissionsResponse:
+    """
+    Bulk update extra and/or revoked permissions for target user.
+    - Super Admin can assign any valid permission.
+    - Non-Super Admin cannot assign SYSTEM_ADMIN_PERMISSIONS and cannot modify equal/higher rank users.
+    - Self-modification is blocked for non-super admins.
+    """
+    target_user = await _resolve_and_authorize_target_user(user_id, actor, db, check_self_modification=True)
+
+    sys_admin_values = {p.value for p in SYSTEM_ADMIN_PERMISSIONS}
+
+    if req_body.extra_permissions is not None:
+        validated_extra = []
+        for p_str in req_body.extra_permissions:
+            norm_p = _validate_permission_name(p_str)
+            if not is_super_admin(actor.role) and norm_p in sys_admin_values:
+                raise ForbiddenError(detail=f"Sistem yöneticisi seviyesindeki '{norm_p}' izni atanamaz.")
+            validated_extra.append(norm_p)
+        target_user.extra_permissions = sorted(list(set(validated_extra)))
+
+    if req_body.revoked_permissions is not None:
+        validated_revoked = []
+        for p_str in req_body.revoked_permissions:
+            norm_p = _validate_permission_name(p_str)
+            validated_revoked.append(norm_p)
+        target_user.revoked_permissions = sorted(list(set(validated_revoked)))
+
+    await db.commit()
+    await db.refresh(target_user)
+
+    audit.log_audit_event(
+        event="YETKILER_GUNCELENDI",
+        user_id=actor.id,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("User-Agent"),
+        details={
+            "target_user_id": str(target_user.id),
+            "extra_permissions": target_user.extra_permissions,
+            "revoked_permissions": target_user.revoked_permissions,
+            "organization_id": str(target_user.organization_id),
+        },
+    )
+
+    return _build_permissions_response(target_user)
+
+
 # ── 2. POST /admin/users/{user_id}/permissions/extra ──────────
 @router.post(
     "/users/{user_id}/permissions/extra",
@@ -2257,12 +2388,16 @@ async def get_admin_security_overview(
     u_active = (await db.execute(select(func.count()).select_from(u_query.where(User.is_active.is_(True)).subquery()))).scalar_one_or_none() or 0
     u_inactive = (await db.execute(select(func.count()).select_from(u_query.where(User.is_active.is_(False)).subquery()))).scalar_one_or_none() or 0
     u_locked = (await db.execute(select(func.count()).select_from(u_query.where(User.is_locked.is_(True)).subquery()))).scalar_one_or_none() or 0
+    u_mfa = (await db.execute(select(func.count()).select_from(u_query.where(User.mfa_enabled.is_(True)).subquery()))).scalar_one_or_none() or 0
+    mfa_rate = round((u_mfa / u_total) * 100) if u_total > 0 else 0
 
     user_stats = SecurityUserStats(
         total=u_total,
         active=u_active,
         inactive=u_inactive,
         locked=u_locked,
+        mfa_enabled=u_mfa,
+        mfa_adoption_rate=mfa_rate,
     )
 
     # 2. Organization metrics

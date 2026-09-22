@@ -5,7 +5,6 @@ FastAPI application instance with middleware, exception handlers,
 and lifecycle management.
 """
 
-import os
 import time
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
@@ -24,6 +23,9 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.redis import close_redis
 from app.db.session import close_db, get_db
+from app.services.ai.deps import get_ai_service
+from app.services.ai.orchestrator import AIOrchestrationService
+
 
 
 @asynccontextmanager
@@ -48,7 +50,12 @@ app = FastAPI(
 # ── CORS ─────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,22 +118,24 @@ async def health_check(
     response: Response,
     db: AsyncSession = Depends(get_db),
     redis: redis_core.Redis | None = Depends(get_redis_client),
+    ai_service: AIOrchestrationService = Depends(get_ai_service),
 ) -> dict[str, Any]:
     """
     Active Readiness Probe & Health Check Endpoint.
 
-    Actively checks PostgreSQL database (`SELECT 1`) and Redis (`PING`),
+    Actively checks PostgreSQL database (`SELECT 1`), Redis (`PING`), and AI Service (`GET /health`),
     calculates component latencies, and returns structured status diagnostics.
 
     Status logic:
-    - 200 OK (status: "healthy"): All components up
-    - 200 OK (status: "degraded"): Database up, Redis down
+    - 200 OK (status: "healthy"): All components up (or AI unconfigured)
+    - 200 OK (status: "degraded"): Database up, Redis or AI Service down
     - 503 Service Unavailable (status: "unhealthy"): Database down
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     components: dict[str, dict[str, Any]] = {}
     is_db_up = False
     is_redis_up = False
+    is_ai_up = True
 
     # 1. Check Database
     t0 = time.perf_counter()
@@ -171,8 +180,36 @@ async def health_check(
             "error": "Redis client unavailable",
         }
 
-    # 3. Determine Overall Status & Response Status Code
-    if is_db_up and is_redis_up:
+    # 3. Check AI Service
+    if settings.AI_SERVICE_URL or get_ai_service in app.dependency_overrides:
+        t0 = time.perf_counter()
+        try:
+            ai_health = await ai_service.check_health()
+            components["ai_service"] = {
+                "status": ai_health.status,
+                "latency_ms": ai_health.latency_ms,
+                "provider": ai_health.provider,
+                "details": ai_health.details,
+            }
+            if ai_health.status == "down":
+                is_ai_up = False
+        except Exception as exc:
+            latency_ai = round((time.perf_counter() - t0) * 1000, 2)
+            components["ai_service"] = {
+                "status": "down",
+                "latency_ms": latency_ai,
+                "error": str(exc),
+            }
+            is_ai_up = False
+    else:
+        components["ai_service"] = {
+            "status": "unconfigured",
+            "latency_ms": 0.0,
+            "details": {"note": "AI_SERVICE_URL is not configured"},
+        }
+
+    # 4. Determine Overall Status & Response Status Code
+    if is_db_up and is_redis_up and is_ai_up:
         overall_status = "healthy"
         response.status_code = status.HTTP_200_OK
     elif is_db_up:
@@ -191,6 +228,7 @@ async def health_check(
     }
 
 
+
 @app.get("/health/liveness", tags=["system"])
 async def liveness_check() -> dict[str, str]:
     """Fast liveness probe for container orchestrators."""
@@ -200,16 +238,17 @@ async def liveness_check() -> dict[str, str]:
 # ── Router Registration ─────────────────────────────────────
 from app.api.v1.auth import router as auth_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.ai import router as ai_router
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
+app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
 
-# ── AI Gateway ──────────────────────────────────────────────
-# Backend'in AI servislerine (sınıflandırma :8100, rapor :8100, 3D segmentasyon
-# pod GPU :8200) köprüsü — kök /api/analyze, /api/library, /api/report tek yerde
-# (app/api/ai_gateway.py). Yusufcan'ın /api/v1 klinik router'ları hazır olunca
-# buradaki uçlar oraya taşınabilir. ENABLE_AI_GATEWAY=0 ile kapatılır.
-if os.environ.get("ENABLE_AI_GATEWAY", "1") != "0":
+# AI köprüsü (Zeynep) — kök /api uçları: /api/analyze, /api/library, /api/comparison,
+# /api/hospital-comparison, /api/radiogenomics, /api/reference-cases (prefix YOK).
+try:
     from app.api.ai_gateway import router as ai_gateway_router
     app.include_router(ai_gateway_router)
+except Exception as _e:  # ai_gateway opsiyonel; import hatası backend'i düşürmesin
+    import logging as _l; _l.getLogger(__name__).warning("ai_gateway yüklenemedi: %s", _e)
 

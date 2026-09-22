@@ -56,6 +56,18 @@ export async function fetchHospitalComparison() {
   return repairDeep(data);
 }
 
+// Radyogenomik sanal biyopsi — gerçek IDH modeli (UCSF-PDGM, AUC 0.919)
+export async function fetchRadiogenomics() {
+  const data = await apiClient.get('/api/radiogenomics', { auth: false, base: 'root' });
+  return repairDeep(data);
+}
+
+// Gerçek anonim referans vakalar (UCSF-PDGM): 4 modalite + seg + patoloji + IDH
+export async function fetchRealCases() {
+  const data = await apiClient.get('/api/reference-cases', { auth: false, base: 'root' });
+  return repairDeep(data);
+}
+
 // ─── Legacy Analiz (Doğrudan Flask/backend) ──────────────────────────────────
 
 async function runLegacyAnalysis({ libraryId, file, signal, onTaskUpdate }) {
