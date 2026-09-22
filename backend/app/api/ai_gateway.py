@@ -209,6 +209,49 @@ async def _report(model_output: dict) -> dict:
     return r.json() if r.status_code == 200 else {}
 
 
+
+# ── Tam FHIR R4 Bundle (rapor vaadi: Patient/ImagingStudy/Observation/DiagnosticReport/CarePlan) ──
+def _fhir_bundle(result: dict) -> dict:
+    import uuid as _uuid
+    pid = "patient-" + _uuid.uuid4().hex[:8]
+    ref = {"reference": f"Patient/{pid}"}
+    pred = result.get("predicted_tumor_type") or result.get("prediction") or "N/A"
+    diag = result.get("diagnosis_tr") or pred
+    conf = result.get("confidence")
+    vol = result.get("tumor_volume_cm3")
+    mol = result.get("molecular") or {}
+    entries = [
+        {"resource": {"resourceType": "Patient", "id": pid, "active": True,
+                      "extension": [{"url": "deidentified", "valueBoolean": True}],
+                      "note": [{"text": "Anonim / de-identified (KVKK)"}]}},
+        {"resource": {"resourceType": "ImagingStudy", "status": "available", "subject": ref,
+                      "modality": [{"system": "http://dicom.nema.org/resources/ontology/DCM", "code": "MR"}],
+                      "description": "Beyin MR (histolojik tip + segmentasyon)",
+                      "numberOfSeries": 1}},
+        {"resource": {"resourceType": "Observation", "status": "final", "subject": ref,
+                      "category": [{"coding": [{"code": "imaging"}]}],
+                      "code": {"text": "Histolojik tip tahmini (AI)"},
+                      "valueString": diag,
+                      "note": [{"text": (f"Güven %{round(conf,1)}" if isinstance(conf, (int, float)) else "—")}]}},
+    ]
+    if isinstance(vol, (int, float)):
+        entries.append({"resource": {"resourceType": "Observation", "status": "final", "subject": ref,
+                        "code": {"text": "Tümör hacmi (3D segmentasyon)"},
+                        "valueQuantity": {"value": vol, "unit": "cm3", "system": "http://unitsofmeasure.org", "code": "cm3"}}})
+    if mol.get("idh_status"):
+        entries.append({"resource": {"resourceType": "Observation", "status": "preliminary", "subject": ref,
+                        "code": {"text": "IDH durumu (radyogenomik)"}, "valueString": str(mol.get("idh_status"))}})
+    entries.append({"resource": {"resourceType": "DiagnosticReport", "status": "preliminary", "subject": ref,
+                    "category": [{"coding": [{"code": "RAD", "display": "Radiology"}]}],
+                    "code": {"text": "AI Beyin Tümörü Tarama Raporu"},
+                    "conclusion": (result.get("report") or f"AI ön tahmini: {diag}."),
+                    "presentedForm": [{"contentType": "text/plain", "title": "Türkçe klinik rapor"}]}})
+    entries.append({"resource": {"resourceType": "CarePlan", "status": "draft", "intent": "proposal", "subject": ref,
+                    "description": "Uzman radyolog onayı; gliomda moleküler doğrulama (IDH/MGMT lab); klinik korelasyon.",
+                    "activity": [{"detail": {"status": "not-started", "description": "Radyolog onayı (zorunlu)"}}]}})
+    return {"resourceType": "Bundle", "type": "collection",
+            "meta": {"profile": ["http://hl7.org/fhir/R4"]}, "entry": entries}
+
 def _legacy_shape(classification: dict, report: dict, image_name: str,
                   images: dict | None = None) -> dict:
     payload = (report or {}).get("payload", {}) if isinstance(report, dict) else {}
@@ -228,7 +271,7 @@ def _legacy_shape(classification: dict, report: dict, image_name: str,
         "Belirsizlik (0-1)": round(ent, 2),
         "Sınıf sayısı": len(raw) or 4,
     }
-    return {
+    _r = {
         "prediction": pred,
         "predicted_tumor_type": pred,   # frontend risk/başlık bunu okur
         "diagnosis_tr": classification.get("prediction_tr"),
@@ -245,6 +288,8 @@ def _legacy_shape(classification: dict, report: dict, image_name: str,
         "image_name": image_name,
         "note": "2D demo görüntüsü — hacim (cm³) yalnızca 3D NIfTI vakasında hesaplanır.",
     }
+    _r["fhir_bundle"] = _fhir_bundle(_r)
+    return _r
 
 
 @router.post("/api/analyze")
@@ -290,6 +335,7 @@ async def analyze(file: UploadFile | None = File(default=None),
             "image_name": os.path.basename(path),
             "note": f"3D nnU-Net segmentasyonu (GPU) — tümör hacmi {vol} cm³ (≈ {diam} cm eşdeğer çap).",
         }
+        result["fhir_bundle"] = _fhir_bundle(result)
         _cache_put(key, result)
         return result
 
@@ -330,6 +376,7 @@ async def analyze(file: UploadFile | None = File(default=None),
             "image_name": os.path.basename(name),
             "note": f"3D nnU-Net segmentasyonu (GPU) - yuklenen NIfTI. Tumor hacmi {vol} cm3 (~ {diam} cm).",
         }
+        result["fhir_bundle"] = _fhir_bundle(result)
         _cache_put(key, result)
         return result
 

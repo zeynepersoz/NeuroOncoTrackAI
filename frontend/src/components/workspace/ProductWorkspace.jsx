@@ -716,8 +716,18 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
         ].filter((item) => normalizeSearchText(`${item.title} ${item.detail}`).includes(query))
       : [];
 
-    return [...caseResults, ...tabResults, ...reportResults].slice(0, 7);
-  }, [analysisResult, libraryScans, patientName, searchQuery, visibleWorkspaceTabs]);
+    const hospitalResults = (hospitalCases || [])
+      .filter((c) => normalizeSearchText(`${c.name || ''} ${c.diagnosis || ''} ${c.department || ''} ${c.id || ''} ${JSON.stringify(c.molecular_structured || {})}`).includes(query))
+      .slice(0, 6)
+      .map((c) => ({ type: 'hospital', id: c.id, title: repairText(c.name) || c.id, detail: repairText(c.diagnosis) || 'Hastane patoloji kaydı (anonim)' }));
+
+    const realResults = ((realCases && realCases.cases) || [])
+      .filter((c) => normalizeSearchText(`${c.id || ''} ${c.diagnosis || ''} ${c.tumor_type || ''} ${c.molecular_note || ''}`).includes(query))
+      .slice(0, 6)
+      .map((c) => ({ type: 'realcase', id: c.id, title: `${c.id} — ${repairText(c.tumor_type) || ''}`.trim(), detail: repairText(c.diagnosis) || 'Gerçek anonim hasta' }));
+
+    return [...caseResults, ...realResults, ...hospitalResults, ...tabResults, ...reportResults].slice(0, 12);
+  }, [analysisResult, libraryScans, hospitalCases, realCases, patientName, searchQuery, visibleWorkspaceTabs]);
 
   const executeSearchResult = useCallback((result) => {
     if (!result) return;
@@ -728,6 +738,8 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       runAnalysis(result.id, null);
       return;
     }
+    if (result.type === 'hospital') { switchTab('hospital'); return; }
+    if (result.type === 'realcase') { setSelectedRealCase(result.id); switchTab('realcases'); return; }
     switchTab(result.id);
   }, [applyCaseProfile, runAnalysis, switchTab]);
 
@@ -1059,6 +1071,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                   border: sel && sel.id === c.id ? '1px solid #3fbf7f' : '1px solid rgba(255,255,255,0.15)',
                   background: sel && sel.id === c.id ? 'rgba(63,191,127,0.12)' : 'transparent', color: 'inherit' }}>
                 {c.id} {c.model_correct === true ? '✓' : c.model_correct === false ? '✗' : ''}
+                {c.segmentation && (c.available_modalities || []).length >= 4 ? <span style={{ marginLeft: 4, fontSize: '0.6rem', color: '#3fbf7f', fontWeight: 700 }}>TAM</span> : null}
               </button>
             ))}
           </div>
@@ -1401,6 +1414,12 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                 <div key={c.id} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 10 }}>
                   <div style={{ display: 'flex', gap: 10 }}>
                     {c.image ? <img src={`data:image/jpeg;base64,${c.image}`} alt={c.id} style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8 }} /> : null}
+                    {c.segmentation ? (
+                      <figure style={{ margin: 0 }}>
+                        <img src={`data:image/jpeg;base64,${c.segmentation}`} alt="3D seg" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 8, outline: '2px solid rgba(229,72,77,0.5)' }} />
+                        <figcaption style={{ fontSize: '0.6rem', opacity: 0.75, textAlign: 'center' }}>4-sınıf seg · WT {c.tumor_volume_cm3}{c.seg_regions ? ` / TC ${c.seg_regions.TC_cm3} / ET ${c.seg_regions.ET_cm3}` : ''} cm³</figcaption>
+                      </figure>
+                    ) : null}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.72rem', opacity: 0.55 }}>{c.id} · WHO {c.who_grade}</div>
                       <div style={{ fontSize: '0.8rem', margin: '2px 0' }}>{repairText(c.diagnosis)}</div>
@@ -1661,6 +1680,22 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             ))}
           </div>
           <pre className="fhir-code-modern">{JSON.stringify(repairDeep(fhirResource), null, 2)}</pre>
+          {analysisResult?.fhir_bundle?.entry?.length ? (
+            <div style={{ marginTop: 16 }}>
+              <div className="product-section-title"><span>HL7 FHIR R4 Bundle</span>
+                <h2>Otomatik kaynaklar ({analysisResult.fhir_bundle.entry.length})</h2></div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {analysisResult.fhir_bundle.entry.map((e, i) => (
+                  <span key={i} style={{ fontSize: '0.78rem', padding: '4px 10px', borderRadius: 8,
+                    background: 'rgba(2,128,144,0.15)', border: '1px solid rgba(2,128,144,0.4)' }}>
+                    {e.resource?.resourceType}
+                  </span>
+                ))}
+              </div>
+              <p className="muted-copy">Patient · ImagingStudy · Observation · DiagnosticReport · CarePlan — HBYS/PACS entegrasyonuna hazır (R4).</p>
+              <pre className="fhir-code-modern">{JSON.stringify(repairDeep(analysisResult.fhir_bundle), null, 2)}</pre>
+            </div>
+          ) : null}
         </section>
       );
     }
@@ -1853,7 +1888,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                 executeSearchResult(searchResults[0]);
               }
             }}
-            placeholder="Vaka, protokol veya rapor ara"
+            placeholder="Ara: hasta (anonim isim), tanı, moleküler, vaka, rapor…"
             aria-label="Vaka, protokol veya rapor ara"
           />
           {searchQuery ? (
@@ -1947,22 +1982,6 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             <label className="workspace-field">
               <span>Protokol</span>
               <input value={patientName} onChange={(event) => setPatientName(event.target.value)} />
-            </label>
-            <label className="workspace-field">
-              <span>Yaş</span>
-              <input
-                type="number"
-                min="0"
-                value={patientAge}
-                onChange={(event) => setPatientAge(Number.parseInt(event.target.value, 10) || 0)}
-              />
-            </label>
-            <label className="workspace-field">
-              <span>Cinsiyet</span>
-              <select value={patientGender} onChange={(event) => setPatientGender(event.target.value)}>
-                <option value="female">Kadın</option>
-                <option value="male">Erkek</option>
-              </select>
             </label>
           </div>
 
