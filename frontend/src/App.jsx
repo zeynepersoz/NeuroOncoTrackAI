@@ -855,6 +855,9 @@ function App() {
 
       setIdleWarning(false);
       setSession(nextSession);
+      if (['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(nextSession?.user?.role)) {
+        setScreen('admin');
+      }
     } catch (error) {
       setStatus({
         tone: 'error',
@@ -981,7 +984,7 @@ function App() {
         mfaState={mfaState}
         onSuccess={(sess) => {
           setSession(sess);
-          setScreen('welcome');
+          setScreen(['ADMIN', 'SUPERADMIN', 'HOSPITAL_ADMIN', 'SUPER_ADMIN'].includes(sess?.user?.role) ? 'admin' : 'welcome');
           setMfaState(null);
         }}
         onBack={() => {

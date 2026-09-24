@@ -172,6 +172,19 @@ async def case_library():
             items.append({"id": cid, "name": labels.get(cid, cid),
                           "description": "BraTS-MEN-RT T1c · 3D nnU-Net (GPU)",
                           "modality": "MR 3D", "is_3d": True})
+    # 3D gliom referans vakalar (UCSF-PDGM) — 4-sinif seg (onceden hesaplanmis, pod gerekmez)
+    try:
+        if RADIOGENOMICS_JSON.exists():
+            _rg = json.loads(RADIOGENOMICS_JSON.read_text(encoding="utf-8"))
+            for c in _rg.get("cases", []):
+                if not c.get("segmentation"):
+                    continue
+                items.append({"id": c.get("id"),
+                              "name": "3D Gliom \u00b7 " + str(c.get("diagnosis") or c.get("id")),
+                              "description": "UCSF-PDGM \u00b7 4-sinif segmentasyon + radyogenomik IDH",
+                              "modality": "MR 3D", "is_3d": True, "is_glioma": True})
+    except Exception:
+        pass
     return items
 
 
@@ -338,6 +351,61 @@ async def analyze(file: UploadFile | None = File(default=None),
         result["fhir_bundle"] = _fhir_bundle(result)
         _cache_put(key, result)
         return result
+
+    # ── 3D gliom referans vakasi (UCSF-PDGM) — onceden hesaplanmis 4-sinif seg (pod gerekmez) ──
+    if library_id and RADIOGENOMICS_JSON.exists():
+        try:
+            _rg = json.loads(RADIOGENOMICS_JSON.read_text(encoding="utf-8"))
+            _gc = next((c for c in _rg.get("cases", [])
+                        if c.get("id") == library_id and c.get("segmentation")), None)
+        except Exception:
+            _gc = None
+        if _gc is not None:
+            reg = _gc.get("seg_regions") or {}
+            wt = _gc.get("tumor_volume_cm3") or reg.get("WT_cm3")
+            diam = round(2 * (3 * wt / (4 * 3.14159265)) ** (1 / 3), 1) if wt else None
+            _sph = next((f.get("value") for f in (_gc.get("top_features") or [])
+                         if str(f.get("feature")).lower() == "sphericity"), None)
+            _idhp = _gc.get("idh_mutant_prob")
+            mol = {**_molecular("glioma"),
+                   "idh_status": _gc.get("model_idh") or _gc.get("truth_idh"),
+                   "idh_prediction": _gc.get("model_idh"),
+                   "idh_mutant_prob": (round(_idhp / 100.0, 4) if isinstance(_idhp, (int, float)) else None),
+                   "idh_confidence": _idhp,
+                   "idh_truth": _gc.get("truth_idh"),
+                   "mgmt_status": _gc.get("mgmt_status"),
+                   "mgmt_methylated_prob": None,
+                   "who_grade": _gc.get("who_grade")}
+            result = {
+                "prediction": "glioma", "predicted_tumor_type": "glioma",
+                "diagnosis_tr": _gc.get("diagnosis") or "Gliom",
+                "confidence": _gc.get("idh_mutant_prob"), "probs": {},
+                "model_id": "ucsf_4class_seg + idh_radiogenomics(AUC 0.919)",
+                "volume": wt, "tumor_volume_cm3": wt, "equiv_diameter_cm": diam,
+                "sphericity": _sph,
+                "seg_regions": reg,
+                "features": {"WT hacmi (cm3)": reg.get("WT_cm3"),
+                             "TC hacmi (cm3)": reg.get("TC_cm3"),
+                             "ET hacmi (cm3)": reg.get("ET_cm3"),
+                             "Sferisite": _sph,
+                             "IDH olasilik (%)": _gc.get("idh_mutant_prob")},
+                "top_features": _gc.get("top_features"),
+                "morphometry": {"volume_cm3": wt, "sphericity": _sph,
+                                "equiv_diameter_cm": diam},
+                "molecular": mol,
+                "report": None, "sections": {}, "is_valid": None, "dual_llm": None, "fhir": {},
+                "images": {"overlay": _gc.get("segmentation"),
+                           "original": _gc.get("image") or _gc.get("segmentation")},
+                "seg_mime": "jpeg",
+                "image_name": _gc.get("id"),
+                "note": ("3D gliom 4-sinif segmentasyon (nekroz/odem/kontrastlanan) - "
+                         "WT %s / TC %s / ET %s cm3. Radyogenomik IDH: %s (%%%s). Kaynak: %s." % (
+                             reg.get("WT_cm3"), reg.get("TC_cm3"), reg.get("ET_cm3"),
+                             _gc.get("model_idh"), _gc.get("idh_mutant_prob"),
+                             _gc.get("seg_engine", "UCSF uzman maskesi"))),
+            }
+            result["fhir_bundle"] = _fhir_bundle(result)
+            return result
 
     # ── 3D NIfTI dosya yükleme (frontend testi: .nii / .nii.gz) ──────────
     if file is not None and (file.filename or "").lower().endswith((".nii", ".nii.gz")):
@@ -508,6 +576,30 @@ async def model_vs_truth():
             row["image"] = imgs.get("overlay") or imgs.get("original")
             row["volume_cm3"] = cached.get("tumor_volume_cm3")
         rows.append(row)
+
+    # 3D gliom referans vakalar (UCSF-PDGM) — 4-sınıf segmentasyon + gerçek IDH tahmini
+    try:
+        if RADIOGENOMICS_JSON.exists():
+            _rg = json.loads(RADIOGENOMICS_JSON.read_text(encoding="utf-8"))
+            for c in _rg.get("cases", []):
+                if not c.get("segmentation"):
+                    continue
+                rows.append({
+                    "id": c.get("id"), "name": "3D Gliom · " + str(c.get("diagnosis") or c.get("id")),
+                    "modality": "MR 3D",
+                    "gt": "glioma", "gt_tr": "Gliom · IDH " + str(c.get("truth_idh", "")),
+                    "pred": "glioma",
+                    "pred_tr": "Gliom · IDH " + str(c.get("model_idh", "")) + " (%" + str(c.get("idh_mutant_prob", "")) + ")",
+                    "confidence": c.get("idh_mutant_prob"),
+                    "correct": bool(c.get("correct")),
+                    "image": c.get("segmentation"),
+                    "volume_cm3": c.get("tumor_volume_cm3"),
+                    "seg_regions": c.get("seg_regions"),
+                    "seg_classes": "4-sınıf (nekroz/ödem/kontrastlanan)",
+                })
+    except Exception:
+        pass
+
     scored = [r for r in rows if r.get("correct") is not None]
     correct = sum(1 for r in scored if r["correct"])
     summary = {"total": len(rows), "scored": len(scored), "correct": correct,
@@ -572,9 +664,50 @@ async def reference_cases():
     """Gerçek anonim glioma hastaları (UCSF-PDGM): her vaka 4 modalite MR,
     3D tümör segmentasyonu (hacim cm³), gerçek patoloji ve radyogenomik IDH
     tahmini içerir. Rapordaki tüm çıktılar tek vakada görülebilir."""
+    base = {"summary": {}, "cases": []}
     if REFERENCE_CASES_JSON.exists():
         try:
-            return json.loads(REFERENCE_CASES_JSON.read_text(encoding="utf-8"))
+            base = json.loads(REFERENCE_CASES_JSON.read_text(encoding="utf-8"))
         except Exception:
-            return {"summary": {}, "cases": []}
-    return {"summary": {}, "cases": []}
+            base = {"summary": {}, "cases": []}
+    cases = list(base.get("cases", []))
+    have = {c.get("id") for c in cases}
+    # 3D gliom referans vakaları (UCSF-PDGM) — 4-sinif segmentasyon + WT/TC/ET + IDH
+    try:
+        if RADIOGENOMICS_JSON.exists():
+            _rg = json.loads(RADIOGENOMICS_JSON.read_text(encoding="utf-8"))
+            for c in _rg.get("cases", []):
+                if not c.get("segmentation") or c.get("id") in have:
+                    continue
+                _mods = {}
+                if c.get("image"):
+                    _mods["T1c"] = c["image"]
+                cases.append({
+                    "id": c.get("id"),
+                    "source": c.get("source", "UCSF-PDGM (public, de-identified)"),
+                    "is_real": True,
+                    "diagnosis": c.get("diagnosis"),
+                    "tumor_type": "glioma",
+                    "molecular_note": "IDH: %s \u00b7 MGMT: %s \u00b7 WHO %s. Radyogenomik IDH modeli (AUC 0,919) tahmini: %s (%%%s)." % (
+                        c.get("truth_idh", ""), c.get("mgmt_status", ""), c.get("who_grade", ""),
+                        c.get("model_idh", ""), c.get("idh_mutant_prob", "")),
+                    "sex": None, "birth_year": None,
+                    "modalities": _mods,
+                    "available_modalities": list(_mods.keys()),
+                    "model_pred_tr": "Gliom \u00b7 IDH %s" % c.get("model_idh", ""),
+                    "model_conf": c.get("idh_mutant_prob"),
+                    "model_correct": bool(c.get("correct")),
+                    "lesion_slice_note": None,
+                    "segmentation": c.get("segmentation"),
+                    "seg_mime": "jpeg",
+                    "tumor_volume_cm3": c.get("tumor_volume_cm3"),
+                    "seg_regions": c.get("seg_regions"),
+                    "equiv_diameter_cm": None,
+                    "seg_engine": c.get("seg_engine", "UCSF uzman maskesi \u2014 4-sinif (nekroz/odem/kontrastlanan)"),
+                })
+    except Exception:
+        pass
+    base["cases"] = cases
+    if isinstance(base.get("summary"), dict):
+        base["summary"]["n"] = len(cases)
+    return base

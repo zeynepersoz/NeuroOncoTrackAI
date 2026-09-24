@@ -123,6 +123,58 @@ export function buildReportHtml(title, approvalText, reportBody) {
 </html>`;
 }
 
+export function buildClinicalReportHtml({ title = 'Klinik Rapor', statusLabel = 'TASLAK', sections = [], narrative = '', meta = {} } = {}) {
+  const today = meta.date || new Date().toLocaleString('tr-TR');
+  const version = meta.version != null ? `Sürüm ${meta.version}` : '';
+  const statusColor = statusLabel === 'FINAL' ? '#0f766e' : String(statusLabel).includes('REVİZYON') ? '#b91c1c' : '#b45309';
+  const sectionHtml = sections.map((s) => `
+    <section class="blk">
+      <h2>${escapeHtml(s.title)}</h2>
+      <table class="kv"><tbody>
+        ${s.rows.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(v == null ? '—' : v))}</td></tr>`).join('')}
+      </tbody></table>
+    </section>`).join('');
+  const narrativeHtml = narrative ? `<section class="blk"><h2>Rapor metni</h2><pre>${escapeHtml(narrative)}</pre></section>` : '';
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"/>
+  <title>${escapeHtml(title)}</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; line-height: 1.5; font-size: 12.5px; margin: 0; background:#fff; }
+    .sheet { max-width: 720px; margin: 0 auto; padding: 24px; }
+    .head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 3px solid #0f766e; padding-bottom: 12px; }
+    .brand { font-size: 20px; font-weight: 800; color:#0f766e; letter-spacing:-0.5px; }
+    .brand small { display:block; font-size: 11px; font-weight:600; color:#475569; letter-spacing:0.4px; }
+    .meta { text-align:right; font-size: 11px; color:#475569; }
+    .status { display:inline-block; margin-top:6px; padding:3px 10px; border-radius: 999px; color:#fff; font-weight:700; font-size:11px; background:${statusColor}; }
+    h1 { font-size: 16px; margin: 18px 0 4px; }
+    .blk { margin-top: 16px; page-break-inside: avoid; }
+    .blk h2 { font-size: 13px; color:#0f766e; margin:0 0 6px; padding-bottom:3px; border-bottom:1px solid #e2e8f0; }
+    table.kv { width:100%; border-collapse: collapse; }
+    table.kv th { text-align:left; width: 38%; padding:5px 8px; color:#475569; font-weight:600; vertical-align:top; }
+    table.kv td { padding:5px 8px; border-bottom:1px solid #f1f5f9; }
+    pre { white-space: pre-wrap; font-family: inherit; font-size:12px; background:#f8fafc; padding:12px; border-radius:8px; margin:0; }
+    .sign { margin-top: 28px; display:flex; justify-content:space-between; gap:24px; page-break-inside: avoid; }
+    .sign div { flex:1; border-top:1px solid #94a3b8; padding-top:6px; font-size:11px; color:#475569; }
+    .foot { margin-top: 22px; border-top:1px solid #e2e8f0; padding-top:12px; font-size:10.5px; color:#64748b; }
+    .disc { margin-bottom:6px; font-style:italic; }
+  </style></head>
+  <body><div class="sheet">
+    <div class="head">
+      <div class="brand">NeuroOncoTrack-AI<small>Klinik Karar Destek · Radyoloji</small></div>
+      <div class="meta">${escapeHtml(today)}<br/>${escapeHtml(version)}<br/><span class="status">${escapeHtml(statusLabel)}</span></div>
+    </div>
+    <h1>${escapeHtml(title)}</h1>
+    ${sectionHtml}
+    ${narrativeHtml}
+    <div class="sign"><div>Hazırlayan (YZ): NeuroOncoTrack-AI</div><div>Onaylayan radyolog: _______________</div></div>
+    <div class="foot">
+      <div class="disc">Bu rapor yapay zekâ destekli bir ÖN değerlendirmedir; tanısal karar ve sorumluluk uzman radyoloğa aittir. IDH/MGMT gibi moleküler öngörüler kesin tanı yerine geçmez.</div>
+      <div>KVKK: Hasta verileri anonim/de-identify işlenmiştir. · WHO 2021 CNS &amp; NCCN kılavuzlarına dayalı. · © 2026 NeuroOncoTrack-AI</div>
+    </div>
+  </div></body></html>`;
+}
+
 export function downloadBlob(content, filename, type) {
   const file = new Blob([content], { type });
   const element = document.createElement('a');
@@ -278,15 +330,21 @@ export function getStructuredReportSections(result, patientName, patientAge, pat
         ['Ön tanı', repairText(result.diagnosis_tr)],
         ['Güven', `${formatter.format(toNumber(result.confidence))}%`],
         ['Hacim', formatNumber(result.volume, ' cm³')],
-        ['Sferisite', formatter.format(toNumber(result.sphericity))],
+        ['Sferisite', (result.sphericity ?? result.morphometry?.sphericity ?? result.features?.['Sferisite']) != null
+          ? formatter.format(toNumber(result.sphericity ?? result.morphometry?.sphericity ?? result.features?.['Sferisite']))
+          : '—'],
       ],
     },
     {
       title: isGlioma ? 'Moleküler öngörü' : 'Moleküler durum',
       rows: isGlioma
         ? [
-            ['IDH', `${repairText(molecular.idh_status || '-')} (${formatPercent(toNumber(molecular.idh_mutant_prob))})`],
-            ['MGMT', `${repairText(molecular.mgmt_status || '-')} (${formatPercent(toNumber(molecular.mgmt_methylated_prob))})`],
+            ['IDH', molecular.idh_mutant_prob != null
+              ? `${repairText(molecular.idh_status || '-')} (${formatPercent(toNumber(molecular.idh_mutant_prob))})`
+              : repairText(molecular.idh_status || '-')],
+            ['MGMT', molecular.mgmt_methylated_prob != null
+              ? `${repairText(molecular.mgmt_status || '-')} (${formatPercent(toNumber(molecular.mgmt_methylated_prob))})`
+              : repairText(molecular.mgmt_status || '-')],
           ]
         : [['Not', 'IDH/MGMT paneli bu sınıflandırma için endike değil.']],
     },

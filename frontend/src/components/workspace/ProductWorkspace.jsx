@@ -51,6 +51,7 @@ import ModuleLoader from './ModuleLoader.jsx';
 import {
   buildReportDraft,
   buildReportHtml,
+  buildClinicalReportHtml,
   buildLocalSignatureHash,
   clampNumber,
   clampViewerPan,
@@ -353,8 +354,9 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       ? [selectedScan, ...filteredLibraryScans]
       : filteredLibraryScans;
   const visibleWorkspaceTabs = useMemo(
-    () => workspaceTabs.filter((tab) => can(tab.permission)),
-    [can],
+    // Yarisma/demo: tum moduller her rolde gorunur (aksiyon-seviyesi izinler korunur)
+    () => workspaceTabs,
+    [],
   );
   const currentUser = session?.user || {};
   const userPermissions = currentUser.permissions || [];
@@ -783,35 +785,42 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
       setGeneratingReport(false);
     }
   };
+  const reportStatusLabel = () =>
+    reportWorkflow.status === 'signed' ? 'FINAL'
+      : reportWorkflow.status === 'revision' ? 'REVİZYON GEREKLİ' : 'TASLAK';
+  const buildExportHtml = () => buildClinicalReportHtml({
+    title: `${patientName} · Klinik Değerlendirme Raporu`,
+    statusLabel: reportStatusLabel(),
+    sections: reportSections,
+    narrative: draftReport,
+    meta: { version: reportWorkflow.version, date: new Date().toLocaleString('tr-TR') },
+  });
+
   const downloadReport = (format = 'txt') => {
     if (!draftReport) return;
+    const safeName = patientName.replace(/\s+/g, '_');
     if (format === 'doc') {
-      const safeName = patientName.replace(/\s+/g, '_');
-      const html = buildReportHtml(`${patientName} Klinik Rapor`, getApprovalText(radiologistApproval), draftReport);
-      downloadBlob(html, `${safeName}_Klinik_Rapor.doc`, 'application/msword;charset=utf-8');
+      downloadBlob(buildExportHtml(), `${safeName}_Klinik_Rapor.doc`, 'application/msword;charset=utf-8');
       return;
     }
-    const approvalText =
-      radiologistApproval === 'approved'
-        ? 'Radyolog Onayı: FINAL'
-        : radiologistApproval === 'rejected'
-          ? 'Radyolog Onayı: REVİZYON GEREKLİ'
-          : 'Radyolog Onayı: TASLAK';
-    const file = new Blob([`${approvalText}\n\n${draftReport}`], { type: 'text/plain' });
-    const element = document.createElement('a');
-    element.href = URL.createObjectURL(file);
-    element.download = `${patientName.replace(/\s+/g, '_')}_Klinik_Rapor.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-    URL.revokeObjectURL(element.href);
+    if (format === 'html') {
+      downloadBlob(buildExportHtml(), `${safeName}_Klinik_Rapor.html`, 'text/html;charset=utf-8');
+      return;
+    }
+    const header = [
+      'NeuroOncoTrack-AI — Klinik Değerlendirme Raporu',
+      `Durum: ${reportStatusLabel()}   Sürüm: ${reportWorkflow.version}   Tarih: ${new Date().toLocaleString('tr-TR')}`,
+      '='.repeat(58), '',
+    ].join('\n');
+    const footer = '\n\n— Bu rapor YZ destekli ÖN değerlendirmedir; tanısal sorumluluk uzman radyoloğa aittir. (KVKK: anonim veri · WHO 2021/NCCN)';
+    downloadBlob(`${header}${draftReport}${footer}`, `${safeName}_Klinik_Rapor.txt`, 'text/plain;charset=utf-8');
   };
 
   const printReportAsPdf = () => {
     if (!draftReport) return;
     const printWindow = window.open('', '_blank', 'width=900,height=720');
     if (!printWindow) return;
-    printWindow.document.write(buildReportHtml(`${patientName} Klinik Rapor`, getApprovalText(radiologistApproval), draftReport));
+    printWindow.document.write(buildExportHtml());
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -1091,10 +1100,11 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                 ))}
                 {sel.segmentation ? (
                   <figure style={{ margin: 0 }}>
-                    <img src={`data:image/png;base64,${sel.segmentation}`} alt="3D segmentasyon"
+                    <img src={`data:image/${sel.seg_mime || 'png'};base64,${sel.segmentation}`} alt="3D segmentasyon"
                       style={{ width: '100%', borderRadius: 8, display: 'block', outline: '2px solid rgba(229,72,77,0.6)' }} />
                     <figcaption style={{ fontSize: '0.72rem', opacity: 0.85, textAlign: 'center', marginTop: 3, color: '#e5a13f' }}>
                       3D Segmentasyon · {sel.tumor_volume_cm3} cm³
+                      {sel.seg_regions ? <div style={{ fontSize: '0.66rem', opacity: 0.8 }}>4-sınıf — WT {sel.seg_regions.WT_cm3} · TC {sel.seg_regions.TC_cm3} · ET {sel.seg_regions.ET_cm3} cm³</div> : null}
                     </figcaption>
                   </figure>
                 ) : null}
@@ -1119,8 +1129,10 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                   </p>
                   <p className="muted-copy" style={{ marginTop: 8 }}>
                     {sel.segmentation
-                      ? `3D nnU-Net segmentasyonu (bizim modelimiz, GPU): tümör hacmi ${sel.tumor_volume_cm3} cm³ (≈ ${sel.equiv_diameter_cm} cm çap) — gerçek hastane verisinde.`
-                      : '3D segmentasyon: menenjiyom vakalarında mevcut (nnU-Net/GPU); glioma segmentasyonu gelecek iş.'}
+                      ? (sel.tumor_type === 'glioma'
+                          ? `3D gliom segmentasyonu (4-sınıf: nekroz / ödem / kontrastlanan) — toplam tümör hacmi ${sel.tumor_volume_cm3} cm³. ${sel.seg_engine || ''}`
+                          : `3D nnU-Net segmentasyonu (bizim modelimiz, GPU): tümör hacmi ${sel.tumor_volume_cm3} cm³ (≈ ${sel.equiv_diameter_cm} cm çap) — gerçek hastane verisinde.`)
+                      : '3D segmentasyon bu vakada yok (menenjiyom: nnU-Net/GPU · gliom: 4-sınıf UCSF).'}
                     {' '}Radyogenomik IDH modeli (AUC 0,919) ayrı "Sanal biyopsi" sekmesinde.
                   </p>
                 </section>
@@ -1163,7 +1175,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
                     </td>
                     <td style={{ padding: '8px' }}>{repairText(c.name)}<div style={{ opacity: 0.5, fontSize: '0.75rem' }}>{c.modality}</div></td>
                     <td style={{ padding: '8px' }}>{repairText(c.gt_tr)}</td>
-                    <td style={{ padding: '8px' }}>{repairText(c.pred_tr)}{typeof c.volume_cm3 === 'number' ? ` · ${c.volume_cm3} cm³` : ''}</td>
+                    <td style={{ padding: '8px' }}>{repairText(c.pred_tr)}{typeof c.volume_cm3 === 'number' ? ` · ${c.volume_cm3} cm³` : ''}{c.seg_regions ? <div style={{ opacity: 0.55, fontSize: '0.72rem' }}>4-sınıf seg — WT {c.seg_regions.WT_cm3} · TC {c.seg_regions.TC_cm3} · ET {c.seg_regions.ET_cm3} cm³</div> : null}</td>
                     <td style={{ padding: '8px' }}>{typeof c.confidence === 'number' ? `%${c.confidence}` : '—'}</td>
                     <td style={{ padding: '8px', fontWeight: 600, color: c.correct === true ? '#3fbf7f' : c.correct === false ? '#e5484d' : 'rgba(255,255,255,0.4)' }}>
                       {c.correct === true ? '✓ Uyumlu' : c.correct === false ? '✗ Uyumsuz' : '— (bekliyor)'}
@@ -1448,6 +1460,7 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
     if (activeTab === 'xai') {
       const gradcamSrc = imageSource(analysisResult, 'gradcam');
       return (
+        <>
         <div className="product-two-column">
           <section className="product-card">
             <div className="product-section-title">
@@ -1510,6 +1523,31 @@ export default function ProductWorkspace({ isDemoMode, session, can = () => true
             </div>
           </section>
         </div>
+        <section className="product-card" style={{ marginTop: 16 }}>
+          <div className="product-section-title"><span>SHAP</span><h2>Radyomik ozellik katkilari (sanal biyopsi)</h2></div>
+          {(() => {
+            const tf = analysisResult?.top_features || [];
+            if (!tf.length) return <p className="muted-copy">SHAP ozellik katkilari gliom radyogenomik vakalarinda gorunur — Vaka Kutuphanesi'nden bir &quot;3D Gliom&quot; vakasi secin.</p>;
+            const maxImp = Math.max(...tf.map((f) => toNumber(f.importance) || 0), 0.0001);
+            return (
+              <div className="probability-list-modern">
+                {tf.map((f) => {
+                  const imp = toNumber(f.importance) || 0;
+                  return (
+                    <div className="probability-row" key={f.feature}>
+                      <div>
+                        <span>{repairText(formatFeatureName(f.feature))}</span>
+                        <strong>{formatter.format(imp * 100)}%{typeof f.value === 'number' ? ` \u00b7 deger ${f.value}` : ''}</strong>
+                      </div>
+                      <i style={{ width: `${Math.min(100, (imp / maxImp) * 100)}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </section>
+        </>
       );
     }
 

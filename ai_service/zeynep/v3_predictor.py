@@ -24,12 +24,14 @@ _HERE = Path(__file__).resolve().parent
 _MODELS = _HERE / "finetuned_models"
 
 CLASS_NAMES = ["glioma", "meningioma", "notumor", "pituitary"]
-W_RF = 0.70
-W_HGB = 0.30
+W_RF = 0.50
+W_HGB = 0.25
+W_LGB = 0.25  # rapor: RF+GB+LGB topluluğu
 
 _CNN = None
 _RF = None
 _HGB = None
+_LGB = None
 
 # preprocess'i v2_predictor'dan yeniden kullan
 from v2_predictor import (
@@ -63,6 +65,14 @@ def _load_hgb():
     return _HGB
 
 
+def _load_lgb():
+    global _LGB
+    if _LGB is None:
+        p = _MODELS / "lgb_kaggle4.pkl"
+        _LGB = joblib.load(p) if p.exists() else False  # yoksa RF+HGB'ye düş
+    return _LGB
+
+
 def _extract_feats(rgb_u8: np.ndarray) -> np.ndarray:
     cnn = _load_cnn()
     lb = _letterbox(rgb_u8, 128).astype(np.float32) / 255.0
@@ -72,9 +82,14 @@ def _extract_feats(rgb_u8: np.ndarray) -> np.ndarray:
 def _ensemble_probs(feats: np.ndarray) -> np.ndarray:
     rf = _load_rf()
     hgb = _load_hgb()
+    lgb = _load_lgb()
     p_rf = rf.predict_proba(feats)[0]
     p_hgb = hgb.predict_proba(feats)[0]
-    p = W_RF * p_rf + W_HGB * p_hgb
+    if lgb is not False and lgb is not None:
+        p_lgb = lgb.predict_proba(feats)[0]
+        p = W_RF * p_rf + W_HGB * p_hgb + W_LGB * p_lgb
+    else:
+        p = 0.7 * p_rf + 0.3 * p_hgb  # LGB yoksa eski davranış
     p = p / p.sum()
     # Kalibrasyon: RF+HGB ensemble under-confident. Temperature (T<1) sıralamayı
     # (argmax=doğruluk) bozmadan güveni gerçek değerine çeker. T, etiketli Kaggle
