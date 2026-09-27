@@ -74,11 +74,11 @@ export const DEFAULT_CLINICAL_USER = {
 export const capabilities = [
   { icon: Eye, label: 'MRG görüntüleme', value: 'T1 / T1c / T2 / FLAIR' },
   { icon: FlaskConical, label: 'Sanal biyopsi', value: 'IDH ve MGMT öngörüsü' },
-  { icon: FileText, label: 'Klinik rapor', value: 'WHO 2021 uyumlu taslak' },
+  { icon: FileText, label: 'Çift-LLM Rapor', value: 'gpt-4o + Claude Sonnet' },
 ];
 
 export const loginMetrics = [
-  { label: 'Macro F1', value: '0.874' },
+  { label: 'Sınıflandırma', value: '%95.8' },
   { label: 'FHIR', value: 'R4' },
   { label: 'Sekans', value: '4 modalite' },
 ];
@@ -141,7 +141,7 @@ export const analysisStages = [
   {
     eyebrow: 'Segmentasyon',
     title: 'Lezyon sınırı çıkarılıyor',
-    detail: 'ResUNet hattı olası tümör alanını ve hacim bilgisini hazırlıyor.',
+    detail: 'nnU-Net 3d_fullres hattı olası tümör alanını ve hacim bilgisini hazırlıyor.',
   },
   {
     eyebrow: 'Sanal biyopsi',
