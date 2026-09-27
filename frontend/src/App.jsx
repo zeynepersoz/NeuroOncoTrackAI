@@ -14,6 +14,10 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
+import appLogo from './assets/UygulamaLogo.png';
+import hl7Img from './assets/hl7.png';
+import auditImg from './assets/audit.png';
+import etikImg from './assets/etik_kurul.jpg';
 import heroImage from './assets/login-workstation.png';
 import {
   capabilities,
@@ -65,10 +69,7 @@ function MfaScreen({ mfaState, onSuccess, onBack }) {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="mfa-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>İki faktörlü doğrulama</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
 
         <div className="auth-heading-row">
@@ -132,13 +133,19 @@ function MfaScreen({ mfaState, onSuccess, onBack }) {
           </div>
         </form>
 
-        <div className="compliance-strip">
-          <span><ShieldAlert size={16} /> TOTP (RFC 6238)</span>
-          <span><Database size={16} /> RS256 JWT</span>
-          <span><Settings size={16} /> Audit-ready</span>
+        
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
         </div>
+
+
+        
       </section>
 
+
+        
       <section className="visual-side visual-abstract" aria-hidden="true">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
@@ -188,11 +195,8 @@ function ChangePasswordScreen({ onSuccess, onBack }) {
       <main className="login-shell">
         <section className="auth-side" aria-labelledby="cp-title">
           <header className="brand-row">
-            <div>
-              <strong>NeuroOncoTrack-AI</strong>
-              <span>Parola değiştirildi</span>
-            </div>
-          </header>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
+        </header>
           <div className="auth-heading-row">
             <div className="auth-copy">
               <span className="eyebrow">Başarılı</span>
@@ -211,7 +215,14 @@ function ChangePasswordScreen({ onSuccess, onBack }) {
               </button>
             </div>
           </div>
+          <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
         </section>
+
         <section className="visual-side visual-abstract" aria-hidden="true">
           <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
           <div className="visual-scrim" aria-hidden="true" />
@@ -224,10 +235,7 @@ function ChangePasswordScreen({ onSuccess, onBack }) {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="cp-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>Parola değiştirme zorunlu</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
         <div className="auth-heading-row">
           <div className="auth-copy">
@@ -292,7 +300,14 @@ function ChangePasswordScreen({ onSuccess, onBack }) {
             </button>
           </div>
         </form>
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
       </section>
+
       <section className="visual-side visual-abstract" aria-hidden="true">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
@@ -346,10 +361,7 @@ function ForgotPasswordScreen({ onBack }) {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="fp-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>Parola sıfırlama</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
         <div className="auth-heading-row">
           <div className="auth-copy">
@@ -461,7 +473,14 @@ function ForgotPasswordScreen({ onBack }) {
             </div>
           </form>
         )}
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
       </section>
+
       <section className="visual-side visual-abstract" aria-hidden="true">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
@@ -472,7 +491,12 @@ function ForgotPasswordScreen({ onBack }) {
 
 // ─── Kayıt Ekranı ─────────────────────────────────────────────────────────────
 
-function RegisterScreen({ onSuccess, onBack }) {
+function RegisterScreen({ onSuccess, onBack, theme, setTheme }) {
+  const [isExiting, setIsExiting] = useState(false);
+  const handleBack = () => {
+    setIsExiting(true);
+    setTimeout(onBack, 400);
+  };
   const [form, setForm] = useState({
     firstName: '', lastName: '', title: '', email: '', password: '', organizationId: '', role: 'PHYSICIAN',
   });
@@ -514,34 +538,70 @@ function RegisterScreen({ onSuccess, onBack }) {
       <main className="login-shell">
         <section className="auth-side" aria-labelledby="reg-title">
           <header className="brand-row">
-            <div>
-              <strong>NeuroOncoTrack-AI</strong>
-              <span>Kayıt başarılı</span>
-            </div>
-          </header>
-          <div className="auth-heading-row">
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
+        </header>
+          <div className={`auth-heading-row ${isExiting ? "fade-out" : "animated-fade"}`}>
             <div className="auth-copy">
               <span className="eyebrow">Hoş geldiniz</span>
               <h1 id="reg-title">Hesap oluşturuldu</h1>
             </div>
           </div>
-          <div className="login-panel">
+          <div className={`login-panel ${isExiting ? "fade-out" : "animated-fade"}`}>
             <div className="form-alert success" role="status">
               <CheckCircle size={18} />
               <span>{success}</span>
             </div>
             <div className="action-row" style={{ marginTop: '1.5rem' }}>
-              <button className="primary-action" type="button" onClick={onBack}>
+              <button className="primary-action" type="button" onClick={handleBack}>
                 <CheckCircle size={18} />
                 Giriş ekranına dön
               </button>
             </div>
           </div>
+          <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
         </section>
-        <section className="visual-side visual-abstract" aria-hidden="true">
-          <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
-          <div className="visual-scrim" aria-hidden="true" />
-        </section>
+
+        <section className="visual-side visual-abstract" aria-label="Klinik çalışma önizlemesi">
+        <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
+        <div className="visual-scrim" aria-hidden="true" />
+
+        <div className="system-panel">
+          <div className="panel-heading">
+            <span>Canlı analiz akışı</span>
+            <strong>MRG &gt; Segmentasyon &gt; Rapor</strong>
+          </div>
+          <div className="capability-list">
+            {capabilities.map((item) => {
+              const Icon = item.icon;
+              return (
+                <article className="capability-item" key={item.label}>
+                  <span className="capability-icon" aria-hidden="true">
+                    <Icon size={18} />
+                  </span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.value}</small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="metric-rail" aria-label="Model ve entegrasyon göstergeleri">
+          {loginMetrics.map((metric) => (
+            <div className="metric-item" key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
       </main>
     );
   }
@@ -550,18 +610,16 @@ function RegisterScreen({ onSuccess, onBack }) {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="reg-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>Yeni hesap oluştur</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
-        <div className="auth-heading-row">
+        <div className={`auth-heading-row ${isExiting ? "fade-out" : "animated-fade"}`}>
           <div className="auth-copy">
             <span className="eyebrow">Ağımıza katılın</span>
             <h1 id="reg-title">Kayıt Ol</h1>
           </div>
+          <ThemeToggle theme={theme} setTheme={setTheme} />
         </div>
-        <form className="login-panel" onSubmit={handleSubmit}>
+        <form className={`login-panel ${isExiting ? "fade-out" : "animated-fade"}`} onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <label className="field-group">
               <span>Ad</span>
@@ -610,16 +668,55 @@ function RegisterScreen({ onSuccess, onBack }) {
               {loading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
               {loading ? 'Kaydediliyor' : 'Hesap Oluştur'}
             </button>
-            <button className="secondary-action" type="button" onClick={onBack}>
+            <button className="secondary-action" type="button" onClick={handleBack}>
               <Activity size={18} />
               Vazgeç
             </button>
           </div>
         </form>
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
       </section>
-      <section className="visual-side visual-abstract" aria-hidden="true">
+
+      <section className="visual-side visual-abstract" aria-label="Klinik çalışma önizlemesi">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
+
+        <div className="system-panel">
+          <div className="panel-heading">
+            <span>Canlı analiz akışı</span>
+            <strong>MRG &gt; Segmentasyon &gt; Rapor</strong>
+          </div>
+          <div className="capability-list">
+            {capabilities.map((item) => {
+              const Icon = item.icon;
+              return (
+                <article className="capability-item" key={item.label}>
+                  <span className="capability-icon" aria-hidden="true">
+                    <Icon size={18} />
+                  </span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.value}</small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="metric-rail" aria-label="Model ve entegrasyon göstergeleri">
+          {loginMetrics.map((metric) => (
+            <div className="metric-item" key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+            </div>
+          ))}
+        </div>
       </section>
     </main>
   );
@@ -632,13 +729,10 @@ function WelcomeScreen({ onLogin, onRegister }) {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="welcome-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>Klinik karar destek platformu</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
 
-        <div className="auth-heading-row" style={{ marginTop: 'auto' }}>
+        <div className="auth-heading-row" style={{ marginTop: '0' }}>
           <div className="auth-copy">
             <span className="eyebrow">Hoş Geldiniz</span>
             <h1 id="welcome-title">NeuroOncoTrack-AI</h1>
@@ -648,7 +742,7 @@ function WelcomeScreen({ onLogin, onRegister }) {
           </div>
         </div>
 
-        <div className="login-panel" style={{ marginTop: '2rem', marginBottom: 'auto' }}>
+        <div className="login-panel" style={{ marginTop: '2rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <button
               className="primary-action"
@@ -670,6 +764,12 @@ function WelcomeScreen({ onLogin, onRegister }) {
             </button>
           </div>
         </div>
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+        </div>
+
       </section>
 
       <section className="visual-side visual-abstract" aria-label="Klinik çalışma önizlemesi">
@@ -721,6 +821,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [rememberStation, setRememberStation] = useState(true);
   const [status, setStatus] = useState(null);
+  const [isExiting, setIsExiting] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [session, setSession] = useState(() => {
     try {
@@ -1009,7 +1110,7 @@ function App() {
   }
 
   if (screen === 'register') {
-    return <RegisterScreen onSuccess={() => setScreen('login')} onBack={() => setScreen('welcome')} />;
+    return <RegisterScreen onSuccess={() => setScreen('login')} onBack={() => setScreen('welcome')} theme={theme} setTheme={setTheme} />;
   }
 
   if (screen === 'welcome') {
@@ -1022,13 +1123,10 @@ function App() {
     <main className="login-shell">
       <section className="auth-side" aria-labelledby="login-title">
         <header className="brand-row">
-          <div>
-            <strong>NeuroOncoTrack-AI</strong>
-            <span>Klinik karar destek platformu</span>
-          </div>
+          <img src={appLogo} alt="NeuroOncoTrack-AI Logo" style={{ height: '120px', width: 'auto', position: 'fixed', bottom: '-15px', left: '10px', zIndex: 50 }} />
         </header>
 
-        <div className="auth-heading-row">
+        <div className={`auth-heading-row ${isExiting ? "fade-out" : "animated-fade"}`}>
           <div className="auth-copy">
             <span className="eyebrow">Yetkili erişim</span>
             <h1 id="login-title">Klinik giriş</h1>
@@ -1036,11 +1134,17 @@ function App() {
           <ThemeToggle theme={theme} setTheme={setTheme} />
         </div>
 
-        <form className="login-panel" onSubmit={handleSubmit}>
+        <form className={`login-panel ${isExiting ? "fade-out" : "animated-fade"}`} onSubmit={handleSubmit}>
           {/* Geri Dön Butonu */}
           <button
             type="button"
-            onClick={() => setScreen('welcome')}
+            onClick={() => {
+              setIsExiting(true);
+              setTimeout(() => {
+                setScreen('welcome');
+                setIsExiting(false);
+              }, 400);
+            }}
             style={{
               background: 'transparent',
               border: 'none',
@@ -1074,6 +1178,7 @@ function App() {
               <button
                 key={tab.id}
                 type="button"
+                className={`login-tab-btn ${loginTab === tab.id ? "active" : ""}`}
                 onClick={() => switchLoginTab(tab.id)}
                 style={{
                   flex: 1,
@@ -1142,7 +1247,7 @@ function App() {
             </div>
           </label>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '1rem', marginTop: '0.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '0.5rem', marginTop: '0.25rem' }}>
             <label className="check-row" style={{ margin: 0 }}>
               <input
                 type="checkbox"
@@ -1153,6 +1258,7 @@ function App() {
             </label>
             <button
               type="button"
+              className="text-link-btn"
               onClick={() => setScreen('forgot-password')}
               style={{
                 background: 'transparent',
@@ -1168,13 +1274,6 @@ function App() {
             </button>
           </div>
 
-          {status ? (
-            <div className={`form-alert ${status.tone}`} role="status">
-              {status.tone === 'success' ? <CheckCircle size={18} /> : <ShieldAlert size={18} />}
-              <span>{status.message}</span>
-            </div>
-          ) : null}
-
           <div className="action-row">
             <button className="primary-action" type="submit" disabled={authLoading}>
               {authLoading ? <RefreshCw className="spin" size={18} /> : <CheckCircle size={18} />}
@@ -1189,24 +1288,28 @@ function App() {
               {isDemoMode ? "Demo'dan çık" : 'Demo erişimi'}
             </button>
           </div>
+
+          {status ? (
+            <div className={`form-alert ${status.tone}`} role="status" style={{ fontSize: "0.85rem", padding: "8px 12px", marginTop: "0.25rem" }}>
+              {status.tone === 'success' ? <CheckCircle size={18} /> : <ShieldAlert size={18} />}
+              <span>{status.message}</span>
+            </div>
+          ) : null}
         </form>
 
-        <div className="compliance-strip" aria-label="Güvenlik ve standart bilgileri">
-          <span>
-            <ShieldAlert size={16} />
-            Etik kurul: TÜTF-GOBAEK 2026/205
-          </span>
-          <span>
-            <Database size={16} />
-            HL7 FHIR R4
-          </span>
-          <span>
-            <Settings size={16} />
-            Audit-ready
-          </span>
+        
+        <div className="compliance-strip" aria-label="Guvenlik ve standart bilgileri" style={{ gap: '14px', display: 'flex', alignItems: 'center', position: 'absolute', bottom: '25px', right: '10px', zIndex: 50 }}>
+          <img src={etikImg} alt="TUTF-GOBAEK" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={hl7Img} alt="HL7 FHIR R4" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
+          <img src={auditImg} alt="Audit Ready" style={{ height: '28px', objectFit: 'contain', borderRadius: '6px' }} />
         </div>
+
+
+        
       </section>
 
+
+        
       <section className="visual-side visual-abstract" aria-label="Klinik çalışma önizlemesi">
         <img className="hero-image" src={heroImage} alt="" aria-hidden="true" />
         <div className="visual-scrim" aria-hidden="true" />
